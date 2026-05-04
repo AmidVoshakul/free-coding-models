@@ -242,14 +242,19 @@ function attachClientAbort(req, res, controller) {
   }
 }
 
-function cloneHeadersForUpstream(reqHeaders, apiKey, providerKey) {
+export function cloneHeadersForUpstream(reqHeaders, apiKey, providerKey) {
   const headers = {}
   for (const [key, value] of Object.entries(reqHeaders || {})) {
     const lower = key.toLowerCase()
     if (['host', 'connection', 'content-length', 'authorization'].includes(lower)) continue
-    if (typeof value === 'string') headers[key] = value
+    if (typeof value !== 'string') continue
+    if (lower === 'content-type') {
+      headers['Content-Type'] = value
+      continue
+    }
+    headers[key] = value
   }
-  headers['Content-Type'] = headers['Content-Type'] || headers['content-type'] || 'application/json'
+  headers['Content-Type'] = headers['Content-Type'] || 'application/json'
   headers.Authorization = `Bearer ${apiKey}`
   if (providerKey === 'openrouter') {
     headers['HTTP-Referer'] = 'https://github.com/vava-nessa/free-coding-models'

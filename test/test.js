@@ -47,7 +47,7 @@ import {
   normalizeRouterConfig,
   DEFAULT_ROUTER_SETTINGS
 } from '../src/config.js'
-import { buildDefaultRouterSet, createRouterRuntimeForTest, formatOpenAiError } from '../src/router-daemon.js'
+import { buildDefaultRouterSet, cloneHeadersForUpstream, createRouterRuntimeForTest, formatOpenAiError } from '../src/router-daemon.js'
 import { formatRouterDuration, normalizeRouterDashboardSnapshot, parseRouterDashboardSseFrame } from '../src/router-dashboard.js'
 import { buildProviderModelTokenKey, loadTokenUsageByProviderModel, formatTokenTotalCompact } from '../src/token-usage-reader.js'
 import { renderTable } from '../src/render-table.js'
@@ -2393,6 +2393,15 @@ describe('router config helpers', () => {
 })
 
 describe('router daemon integration hardening', () => {
+  it('canonicalizes content-type before proxying upstream requests', () => {
+    const actual = cloneHeadersForUpstream({ 'content-type': 'application/json', accept: 'application/json' }, 'router-test-key', 'groq')
+
+    assert.equal(actual['Content-Type'], 'application/json')
+    assert.equal(actual['content-type'], undefined)
+    assert.equal(actual.Authorization, 'Bearer router-test-key')
+    assert.equal(actual.accept, 'application/json')
+  })
+
   it('routes non-streaming chat completions through the highest-priority healthy model', async () => {
     await withMockProvider(() => ({
       body: {
