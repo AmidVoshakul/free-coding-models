@@ -136,10 +136,12 @@ function getManagedProviderId(providerKey) {
 }
 
 function getProviderLabel(providerKey) {
+  if (providerKey === 'fcm_router') return 'Smart Router Daemon'
   return PROVIDER_METADATA[providerKey]?.label || sources[providerKey]?.name || providerKey
 }
 
 function getManagedProviderLabel(providerKey) {
+  if (providerKey === 'fcm_router') return 'FCM Smart Router'
   return `FCM ${getProviderLabel(providerKey)}`
 }
 
@@ -157,6 +159,10 @@ function getDefaultMaxTokens(contextWindow) {
 }
 
 function resolveProviderBaseUrl(providerKey) {
+  if (providerKey === 'fcm_router') {
+    return `http://localhost:${process.env.FCM_ROUTER_PORT || '19280'}/v1`
+  }
+
   const providerUrl = sources[providerKey]?.url
   if (!providerUrl) return null
 
@@ -173,6 +179,9 @@ function resolveProviderBaseUrl(providerKey) {
 }
 
 function resolveGooseBaseUrl(providerKey) {
+  if (providerKey === 'fcm_router') {
+    return `http://localhost:${process.env.FCM_ROUTER_PORT || '19280'}/v1`
+  }
   const providerUrl = sources[providerKey]?.url
   if (!providerUrl) return null
   if (providerKey === 'cloudflare') {
@@ -184,6 +193,7 @@ function resolveGooseBaseUrl(providerKey) {
 }
 
 function getDirectInstallSupport(providerKey) {
+  if (providerKey === 'fcm_router') return { supported: true, reason: null }
   if (!sources[providerKey]) {
     return { supported: false, reason: 'Unknown provider' }
   }
@@ -220,6 +230,12 @@ function buildCatalogModel(modelId, label, tier, sweScore, ctx) {
 }
 
 export function getProviderCatalogModels(providerKey) {
+  if (providerKey === 'fcm_router') {
+    return [
+      buildCatalogModel('fcm', 'FCM Smart Router', 'S+', 100, '200k')
+    ]
+  }
+
   const seen = new Set()
   return MODELS
     .filter((entry) => entry[5] === providerKey)
@@ -252,6 +268,7 @@ export function getInstallTargetModes() {
 }
 
 function requireConfiguredProviderKey(config, providerKey) {
+  if (providerKey === 'fcm_router') return 'fcm-local'
   const apiKey = getApiKey(config, providerKey)
   if (!apiKey) {
     throw new Error(`No configured API key found for ${getProviderLabel(providerKey)}`)

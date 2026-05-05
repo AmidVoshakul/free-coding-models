@@ -269,6 +269,7 @@ export function createKeyHandler(ctx) {
     installProviderEndpoints,
     syncFavoriteFlags,
     toggleFavoriteModel,
+    reorderFavorite,
     sortResultsWithPinnedFavorites,
     adjustScrollOffset,
     applyTierFilter,
@@ -1439,7 +1440,8 @@ export function createKeyHandler(ctx) {
     if (state.routerDashboardOpen) {
       if (key.ctrl && key.name === 'c') { exit(0); return }
       const favorites = Array.isArray(state.config?.favorites) ? state.config.favorites : []
-      const maxCursor = Math.max(0, favorites.length - 1)
+      // 📖 maxCursor accounts for the favorites list + 2 buttons (Start/Stop Daemon and Install Endpoint)
+      const maxCursor = Math.max(0, favorites.length + 1)
       const pageStep = Math.max(1, (state.terminalRows || 1) - 4)
 
       if (key.name === 'escape') {
@@ -1447,10 +1449,10 @@ export function createKeyHandler(ctx) {
         return
       }
 
-      // 📖 Ctrl+↑: move the selected favorite UP in fallback priority
-      if (key.ctrl && key.name === 'up') {
-        if (favorites.length > 0) {
-          const cursorIdx = state.routerDashboardCursorIndex ?? 0
+      // 📖 Shift+↑: move the selected favorite UP in fallback priority
+      if (key.shift && key.name === 'up') {
+        const cursorIdx = state.routerDashboardCursorIndex ?? 0
+        if (favorites.length > 0 && cursorIdx < favorites.length) {
           const favKey = favorites[cursorIdx]
           if (favKey) {
             const slashIdx = favKey.indexOf('/')
@@ -1466,10 +1468,10 @@ export function createKeyHandler(ctx) {
         return
       }
 
-      // 📖 Ctrl+↓: move the selected favorite DOWN in fallback priority
-      if (key.ctrl && key.name === 'down') {
-        if (favorites.length > 0) {
-          const cursorIdx = state.routerDashboardCursorIndex ?? 0
+      // 📖 Shift+↓: move the selected favorite DOWN in fallback priority
+      if (key.shift && key.name === 'down') {
+        const cursorIdx = state.routerDashboardCursorIndex ?? 0
+        if (favorites.length > 0 && cursorIdx < favorites.length) {
           const favKey = favorites[cursorIdx]
           if (favKey) {
             const slashIdx = favKey.indexOf('/')
@@ -1477,7 +1479,7 @@ export function createKeyHandler(ctx) {
             const modelId = slashIdx >= 0 ? favKey.slice(slashIdx + 1) : favKey
             const moved = reorderFavorite(state.config, providerKey, modelId, 'down')
             if (moved) {
-              state.routerDashboardCursorIndex = Math.min(maxCursor, cursorIdx + 1)
+              state.routerDashboardCursorIndex = Math.min(favorites.length - 1, cursorIdx + 1)
               syncFavoriteFlags(state.results, state.config)
             }
           }
@@ -1485,17 +1487,56 @@ export function createKeyHandler(ctx) {
         return
       }
 
-      // 📖 ↑/↓: navigate the favorites list cursor
-      if (key.name === 'up' || key.name === 'k') {
-        if (favorites.length > 0) {
-          state.routerDashboardCursorIndex = Math.max(0, (state.routerDashboardCursorIndex ?? 0) - 1)
+      // 📖 S: Toggle daemon start/stop
+      if (key.name === 's') {
+        const isRunning = state.routerDashboardStatus === 'ready' || state.routerDashboardStatus === 'partial'
+        const binPath = join(dirname(fileURLToPath(import.meta.url)), '..', 'bin', 'free-coding-models.js')
+        const args = isRunning ? ['--daemon-stop'] : ['--daemon-bg']
+        
+        state.routerDashboardStatus = 'loading'
+        const child = spawn('node', [binPath, ...args], {
+          detached: true,
+          stdio: 'ignore',
+        })
+        child.unref()
+        return
+      }
+
+      // 📖 Enter/Return: Toggle daemon or open Install Endpoints if cursor is on a button
+      if (key.name === 'return' || key.name === 'enter') {
+        const btnCursor = favorites.length
+        const installBtnCursor = favorites.length + 1
+
+        if ((state.routerDashboardCursorIndex ?? 0) === btnCursor) {
+          const isRunning = state.routerDashboardStatus === 'ready' || state.routerDashboardStatus === 'partial'
+          const binPath = join(dirname(fileURLToPath(import.meta.url)), '..', 'bin', 'free-coding-models.js')
+          const args = isRunning ? ['--daemon-stop'] : ['--daemon-bg']
+          
+          state.routerDashboardStatus = 'loading'
+          const child = spawn('node', [binPath, ...args], {
+            detached: true,
+            stdio: 'ignore',
+          })
+          child.unref()
+        } else if ((state.routerDashboardCursorIndex ?? 0) === installBtnCursor) {
+          state.routerDashboardOpen = false
+          state.installEndpointsOpen = true
+          state.installEndpointsPhase = 'tools' // skip the provider selection phase
+          state.installEndpointsCursor = 0
+          state.installEndpointsProviderKey = 'fcm_router' // special provider key handled by endpoint-installer
+          state.installEndpointsScrollOffset = 0
+          state.installEndpointsErrorMsg = null
         }
         return
       }
+
+      // 📖 ↑/↓: navigate the favorites list cursor
+      if (key.name === 'up' || key.name === 'k') {
+        state.routerDashboardCursorIndex = Math.max(0, (state.routerDashboardCursorIndex ?? 0) - 1)
+        return
+      }
       if (key.name === 'down' || key.name === 'j') {
-        if (favorites.length > 0) {
-          state.routerDashboardCursorIndex = Math.min(maxCursor, (state.routerDashboardCursorIndex ?? 0) + 1)
-        }
+        state.routerDashboardCursorIndex = Math.min(maxCursor, (state.routerDashboardCursorIndex ?? 0) + 1)
         return
       }
       if (key.name === 'pageup') {
@@ -1527,7 +1568,7 @@ export function createKeyHandler(ctx) {
       if (key.ctrl && key.name === 'c') { exit(0); return }
 
       const providerChoices = getConfiguredInstallableProviders(state.config)
-      const toolChoices = getInstallTargetModes()
+      const toolChoices = getInstallTargetModes().filter(t => !(state.installEndpointsProviderKey === 'fcm_router' && t === 'fcm_router'))
       const modelChoices = state.installEndpointsProviderKey
         ? getProviderCatalogModels(state.installEndpointsProviderKey)
         : []
@@ -1569,10 +1610,19 @@ export function createKeyHandler(ctx) {
       if (key.name === 'escape') {
         state.installEndpointsErrorMsg = null
         if (state.installEndpointsPhase === 'providers' || state.installEndpointsPhase === 'result') {
+          const wasFcmRouter = state.installEndpointsProviderKey === 'fcm_router'
           resetInstallEndpointsOverlay()
+          if (wasFcmRouter) {
+            state.routerDashboardOpen = true
+          }
           return
         }
         if (state.installEndpointsPhase === 'tools') {
+          if (state.installEndpointsProviderKey === 'fcm_router') {
+             resetInstallEndpointsOverlay()
+             state.routerDashboardOpen = true
+             return
+          }
           state.installEndpointsPhase = 'providers'
           state.installEndpointsCursor = 0
           state.installEndpointsScrollOffset = 0
@@ -1617,10 +1667,25 @@ export function createKeyHandler(ctx) {
           if (!selectedToolMode) return
           state.installEndpointsToolMode = selectedToolMode
           state.installEndpointsConnectionMode = 'direct'
-          state.installEndpointsPhase = 'scope'
-          state.installEndpointsCursor = 0
-          state.installEndpointsScrollOffset = 0
-          state.installEndpointsErrorMsg = null
+          
+          if (state.installEndpointsProviderKey === 'fcm_router') {
+            state.installEndpointsScope = 'all'
+            try {
+              await runInstallEndpointsFlow()
+            } catch (error) {
+              state.installEndpointsResult = {
+                type: 'error',
+                title: 'Install failed',
+                lines: [error instanceof Error ? error.message : String(error)],
+              }
+              state.installEndpointsPhase = 'result'
+            }
+          } else {
+            state.installEndpointsPhase = 'scope'
+            state.installEndpointsCursor = 0
+            state.installEndpointsScrollOffset = 0
+            state.installEndpointsErrorMsg = null
+          }
         }
         return
       }
@@ -1695,7 +1760,11 @@ export function createKeyHandler(ctx) {
 
       if (state.installEndpointsPhase === 'result') {
         if (key.name === 'return' || key.name === 'y') {
+          const wasFcmRouter = state.installEndpointsProviderKey === 'fcm_router'
           resetInstallEndpointsOverlay()
+          if (wasFcmRouter) {
+            state.routerDashboardOpen = true
+          }
         }
         return
       }
@@ -2593,10 +2662,26 @@ export function createKeyHandler(ctx) {
 
     // 📖 Profile system removed - API keys now persist permanently across all sessions
 
-    // 📖 Shift+R intentionally stays unadvertised in the main UI, but remains
-    // 📖 available as a tester entry point for the Router Dashboard.
+    // 📖 Shift+R: Open Router Dashboard AND launch OpenCode with the selected model.
+    // 📖 If the dashboard is already open, just bring it to front.
     if (key.name === 'r' && key.shift && !key.ctrl && !key.meta) {
+      if (state.routerDashboardOpen) {
+        state.routerDashboardScrollOffset = 0
+        return
+      }
       openRouterDashboardOverlay(state)
+      // 📖 If a model is selected in the main table, launch OpenCode with it after opening dashboard
+      const selected = state.visibleSorted?.[state.cursor]
+      if (selected && selected.providerKey && selected.modelId) {
+        const launchModel = {
+          modelId: selected.modelId,
+          label: selected.label,
+          tier: selected.tier,
+          providerKey: selected.providerKey,
+        }
+        // 📖 Launch asynchronously — don't await, dashboard renders while OpenCode starts
+        void startOpenCode(launchModel, state.config)
+      }
       return
     }
 

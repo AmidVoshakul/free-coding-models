@@ -21,9 +21,10 @@
  *   → toFavoriteKey(providerKey, modelId)        — Build the canonical "providerKey/modelId" string
  *   → syncFavoriteFlags(results, config)         — Attach isFavorite/favoriteRank to result rows
  *   → toggleFavoriteModel(config, providerKey, modelId) — Add/remove favorite and persist
+ *   → pruneOrphanedFavorites(results, config)    — Remove favorites referencing models no longer in sources
  *
  * @exports
- *   ensureFavoritesConfig, toFavoriteKey, syncFavoriteFlags, toggleFavoriteModel
+ *   ensureFavoritesConfig, toFavoriteKey, syncFavoriteFlags, toggleFavoriteModel, pruneOrphanedFavorites
  *
  * @see src/config.js  — load/save helpers keep favorite persistence atomic and merge-safe
  * @see bin/free-coding-models.js — calls syncFavoriteFlags on startup and toggleFavoriteModel on F key
@@ -124,4 +125,24 @@ export function reorderFavorite(config, providerKey, modelId, direction) {
   const saveResult = saveConfig(latestConfig, { replaceFavorites: true })
   if (saveResult.success) replaceConfigContents(config, latestConfig)
   return true
+}
+
+/**
+ * 📖 Remove favorites that reference models no longer present in the active sources.
+ * 📖 Called once at startup so the router dashboard does not show stale/removed models.
+ * 📖 Persists immediately if any orphaned entries are found.
+ * @param {Array<Record<string, unknown>>} results — the full result rows from sources
+ * @param {Record<string, unknown>} config
+ * @returns {number} count of removed orphaned entries
+ */
+export function pruneOrphanedFavorites(results, config) {
+  ensureFavoritesConfig(config)
+  const validKeys = new Set(results.map(r => toFavoriteKey(r.providerKey, r.modelId)))
+  const before = config.favorites.length
+  config.favorites = config.favorites.filter(key => validKeys.has(key))
+  const removed = before - config.favorites.length
+  if (removed > 0) {
+    saveConfig(config, { replaceFavorites: true })
+  }
+  return removed
 }

@@ -343,7 +343,7 @@ export function createOverlayRenderers(state, deps) {
     const lines = []
     const cursorLineByRow = {}
     const providerChoices = getConfiguredInstallableProviders(state.config)
-    const toolChoices = getInstallTargetModes()
+    const toolChoices = getInstallTargetModes().filter(t => !(state.installEndpointsProviderKey === 'fcm_router' && t === 'fcm_router'))
     const totalSteps = 4
     const scopeChoices = [
       {
@@ -357,9 +357,11 @@ export function createOverlayRenderers(state, deps) {
         hint: 'Choose a smaller curated subset for a cleaner model picker.',
       },
     ]
-    const selectedProviderLabel = state.installEndpointsProviderKey
-      ? (sources[state.installEndpointsProviderKey]?.name || state.installEndpointsProviderKey)
-      : '—'
+    const selectedProviderLabel = state.installEndpointsProviderKey === 'fcm_router' 
+      ? 'Smart Router Daemon' 
+      : state.installEndpointsProviderKey
+        ? (sources[state.installEndpointsProviderKey]?.name || state.installEndpointsProviderKey)
+        : '—'
 
     // 📖 Resolve tool label from metadata instead of hard-coded switch
     const selectedToolLabel = state.installEndpointsToolMode

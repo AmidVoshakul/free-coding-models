@@ -111,7 +111,7 @@ import { resolveCloudflareUrl, buildPingRequest, ping, extractQuotaPercent, getP
 import { runFiableMode, filterByTierOrExit, fetchOpenRouterFreeModels } from '../src/analysis.js'
 import { PROVIDER_METADATA, ENV_VAR_NAMES, isWindows, isMac } from '../src/provider-metadata.js'
 import { parseTelemetryEnv, isTelemetryDebugEnabled, telemetryDebug, ensureTelemetryConfig, getTelemetryDistinctId, getTelemetrySystem, getTelemetryTerminal, isTelemetryEnabled, sendUsageTelemetry } from '../src/telemetry.js'
-import { ensureFavoritesConfig, toFavoriteKey, syncFavoriteFlags, toggleFavoriteModel, reorderFavorite } from '../src/favorites.js'
+import { ensureFavoritesConfig, toFavoriteKey, syncFavoriteFlags, toggleFavoriteModel, reorderFavorite, pruneOrphanedFavorites } from '../src/favorites.js'
 import { checkForUpdateDetailed, checkForUpdate, runUpdate, promptUpdateNotification, fetchLastReleaseDate } from './updater.js'
 import { promptApiKey } from '../src/setup.js'
 import { syncShellEnv, ensureShellRcSource, promptShellEnvMigration, removeShellEnv } from '../src/shell-env.js'
@@ -372,6 +372,9 @@ export async function runApp(cliArgs, config) {
       hidden: false,  // 📖 Simple flag to hide/show models
     }))
   syncFavoriteFlags(results, config)
+  // 📖 Garbage-collect favorites that reference models no longer in sources.js,
+  // 📖 so the router dashboard only shows real, launchable models.
+  pruneOrphanedFavorites(results, config)
 
   // 📖 Load usage data from token-stats.json and attach usagePercent to each result row.
   // 📖 usagePercent is the quota percent remaining (0–100). undefined = no data available.
@@ -579,7 +582,8 @@ export async function runApp(cliArgs, config) {
   const scheduleNextPing = () => {
     clearTimeout(state.pingIntervalObj)
     const elapsed = Date.now() - state.lastPingTime
-    const delay = Math.max(0, state.pingInterval - elapsed)
+    const interval = state.routerDashboardOpen ? 1000 : state.pingInterval
+    const delay = Math.max(0, interval - elapsed)
     state.pingIntervalObj = setTimeout(runPingCycle, delay)
   }
 
@@ -1224,6 +1228,13 @@ if (unconfiguredHide) {
     }
 
     state.results.forEach(r => {
+      // 📖 When router dashboard is open, ONLY ping favorites every second
+      // 📖 to prevent massive rate limiting across the entire 90+ model catalog.
+      if (state.routerDashboardOpen) {
+        const favKey = `${r.providerKey}/${r.modelId}`
+        if (!state.config.favorites.includes(favKey)) return
+      }
+
       pingModel(r).catch(() => {
         // Individual ping failures don't crash the loop
       })

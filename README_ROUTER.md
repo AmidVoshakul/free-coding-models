@@ -7,7 +7,7 @@ The **FCM Router** is a local OpenAI-compatible daemon that keeps running after 
 ## Quick Start
 
 ```bash
-# Start the router in the background
+# Start the router in the background (or press 'S' in the Router Dashboard)
 free-coding-models --daemon-bg
 
 # Check status
@@ -40,7 +40,7 @@ Your **favorites** (star models with `F` in the main table) automatically become
 - **#2** is the first fallback if #1 fails
 - And so on...
 
-Use **Ctrl+↑/↓** in the Router Dashboard to reorder models.
+Use **Shift+↑/↓** in the Router Dashboard to reorder models.
 
 ### Health Check Speed
 

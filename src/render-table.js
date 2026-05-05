@@ -825,7 +825,7 @@ export function renderTable(results, pendingPings, frame, cursor = null, sortCol
   const starLink = '⭐ ' + themeColors.link('\x1b]8;;https://github.com/vava-nessa/free-coding-models\x1b\\GitHub\x1b]8;;\x1b\\')
   lines.push(
     '  ' + paletteLabel + themeColors.dim(`  •  `) + starLink + themeColors.dim(`  •  `) +
-    chalk.rgb(255, 168, 209).bold('\x1b]8;;https://x.com/vavanessadev\x1b\\Support me by following me on X ! @vavanessadev\x1b]8;;\x1b\\')
+    chalk.rgb(255, 168, 209).bold('\x1b]8;;https://x.com/vavanessadev\x1b\\Follow @vavanessadev on X for updates and support\x1b]8;;\x1b\\')
   )
 
   if (versionStatus.isOutdated) {

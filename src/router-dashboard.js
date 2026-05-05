@@ -43,9 +43,10 @@ import chalk from 'chalk'
 import { existsSync, readFileSync } from 'node:fs'
 import { displayWidth, padEndDisplay, sliceOverlayLines, tintOverlayLines } from './render-helpers.js'
 import { ROUTER_DEFAULT_PORT, ROUTER_MAX_PORT, ROUTER_PID_PATH, ROUTER_PORT_PATH, getRouterPortRange } from './router-daemon.js'
-import { themeColors } from './theme.js'
+import { themeColors, getTierRgb } from './theme.js'
 import { formatTokenTotalCompact } from './token-usage-reader.js'
 import { sendUsageTelemetry } from './telemetry.js'
+import { getAvg, getVerdict } from './utils.js'
 
 export const ROUTER_DASHBOARD_POLL_INTERVAL_MS = 2000
 export const ROUTER_DASHBOARD_FETCH_TIMEOUT_MS = 1200
@@ -859,7 +860,7 @@ export function renderRouterDashboard(state, deps = {}) {
   // 📖 Instead of the old "sets" system, show the user's favorites from the main
   // 📖 table as the router fallback chain. #1 = tried first, #2 = next, etc.
   lines.push(`  ${themeColors.textBold('Router Models')} ${themeColors.dim('— your favorites, in fallback order')}`)
-  lines.push(`  ${themeColors.dim('Star models with F in the main table. Ctrl+↑↓ to reorder here.')}`)
+  lines.push(`  ${themeColors.dim('Star models with F in the main table. Shift+↑↓ to reorder here.')}`)
   lines.push('')
 
   // 📖 Build the favorites list — pull from config.favorites + daemon health data
@@ -879,33 +880,84 @@ export function renderRouterDashboard(state, deps = {}) {
       healthByKey.set(`${m.provider}/${m.model}`, m)
     }
 
+    // 📖 Column headers
+    lines.push(`  ${themeColors.dim(padEndDisplay('PRI', 4))} ${themeColors.dim(padEndDisplay('MODEL', 42))} ${themeColors.dim(padEndDisplay('DAEMON STATUS', 16))} ${themeColors.dim(padEndDisplay('AVG PING', 8))} ${themeColors.dim('VERDICT')}`)
+
     for (let i = 0; i < favorites.length; i++) {
       const favKey = favorites[i]
       const health = healthByKey.get(favKey)
       const isCursorRow = i === cursor
 
-      // 📖 Human-readable health label instead of circuit breaker jargon
-      let healthLabel
-      if (!isRunning) {
-        healthLabel = themeColors.dim('—')
-      } else if (health) {
-        const st = safeString(health.state, 'UNKNOWN').toUpperCase()
-        if (st === 'CLOSED') healthLabel = themeColors.success('✅ Healthy')
-        else if (st === 'HALF_OPEN') healthLabel = themeColors.warning('⚠️  Recovering')
-        else if (st === 'OPEN') healthLabel = themeColors.error('❌ Down')
-        else if (st === 'AUTH_ERROR') healthLabel = themeColors.error('🔑 Auth Error')
-        else if (st === 'STALE') healthLabel = themeColors.dim('💀 Stale')
-        else if (st === 'UNSUPPORTED') healthLabel = themeColors.dim('✖ Unsupported')
-        else healthLabel = themeColors.dim(`? ${st}`)
+      let healthLabel = themeColors.dim(padEndDisplay('—', 16))
+      
+      const mainResult = state.results?.find(r => `${r.providerKey}/${r.modelId}` === favKey)
+      
+      if (mainResult) {
+        let statusText, statusColor
+        if (mainResult.status === 'noauth') {
+          statusText = `🔑 NO KEY`
+          statusColor = themeColors.dim
+        } else if (mainResult.status === 'auth_error') {
+          statusText = `🔐 AUTH FAIL`
+          statusColor = themeColors.errorBold
+        } else if (mainResult.status === 'pending') {
+          statusText = `⏳ PENDING`
+          statusColor = themeColors.warning
+        } else if (mainResult.status === 'up') {
+          statusText = `✅ UP`
+          statusColor = themeColors.success
+        } else if (mainResult.status === 'timeout') {
+          statusText = `⏳ TIMEOUT`
+          statusColor = themeColors.warning
+        } else if (mainResult.status === 'down') {
+          const code = mainResult.httpCode ?? 'ERR'
+          const errorEmojis = { '429': '🔥', '404': '🚫', '500': '💥', '502': '🔌', '503': '🔒', '504': '⏰' }
+          const errorLabels = { '404': '404 NOT FOUND', '410': '410 GONE', '429': '429 TRY LATER', '500': '500 ERROR' }
+          const emoji = errorEmojis[code] || '❌'
+          statusText = `${emoji} ${errorLabels[code] || code}`
+          statusColor = themeColors.error
+        } else {
+          statusText = '?'
+          statusColor = themeColors.dim
+        }
+        healthLabel = statusColor(padEndDisplay(statusText, 16))
       } else {
-        healthLabel = themeColors.dim('⏳ Pending')
+        healthLabel = themeColors.dim(padEndDisplay('⏳ Pending', 16))
       }
 
-      const latency = health && Number.isFinite(health.last_latency_ms)
-        ? themeColors.dim(`${Math.round(health.last_latency_ms)}ms`)
-        : ''
+      // 📖 Get global metrics from main table state
+      let avgPingDisplay = themeColors.dim('———')
+      let verdictDisplay = themeColors.dim('Pending ⏳')
 
-      const rowText = `  ${padEndDisplay(priorityGlyph(i), 4)} ${padEndDisplay(favKey, 42)} ${padEndDisplay(healthLabel, 18)} ${latency}`
+      if (mainResult) {
+        // Avg Ping
+        const avg = getAvg(mainResult)
+        if (avg !== Infinity) {
+          const str = String(avg).padEnd(4)
+          avgPingDisplay = avg < 500 ? themeColors.metricGood(str) : avg < 1500 ? themeColors.metricWarn(str) : themeColors.metricBad(str)
+        }
+
+        // Verdict
+        const verdict = getVerdict(mainResult)
+        let verdictText, verdictColor
+        switch (verdict) {
+          case 'Perfect': verdictText = 'Perfect 🚀'; verdictColor = themeColors.successBold; break
+          case 'Normal': verdictText = 'Normal ✅'; verdictColor = themeColors.metricGood; break
+          case 'Spiky': verdictText = 'Spiky 📈'; verdictColor = (t) => chalk.bold.rgb(...getTierRgb('A+'))(t); break
+          case 'Slow': verdictText = 'Slow 🐢'; verdictColor = (t) => chalk.bold.rgb(...getTierRgb('A-'))(t); break
+          case 'Very Slow': verdictText = 'Very Slow 🐌'; verdictColor = (t) => chalk.bold.rgb(...getTierRgb('B+'))(t); break
+          case 'Overloaded': verdictText = 'Overloaded 🔥'; verdictColor = (t) => chalk.bold.rgb(...getTierRgb('B'))(t); break
+          case 'Unstable': verdictText = 'Unstable  ⚠️'; verdictColor = themeColors.errorBold; break
+          case 'Not Active': verdictText = 'Not Active  👻'; verdictColor = themeColors.dim; break
+          case 'Pending': verdictText = 'Pending ⏳'; verdictColor = themeColors.dim; break
+          default: verdictText = 'Unusable 💀'; verdictColor = (t) => chalk.bold.rgb(...getTierRgb('C'))(t); break
+        }
+        verdictDisplay = verdictColor(padEndDisplay(verdictText, 14))
+      } else {
+        verdictDisplay = padEndDisplay(verdictDisplay, 14)
+      }
+
+      const rowText = `  ${padEndDisplay(priorityGlyph(i), 4)} ${padEndDisplay(favKey, 42)} ${padEndDisplay(healthLabel, 16)} ${padEndDisplay(avgPingDisplay, 8)} ${verdictDisplay}`
 
       if (isCursorRow) {
         lines.push(themeColors.bgCursor(rowText + ' '.repeat(Math.max(0, width - displayWidth(rowText) - 3))))
@@ -913,6 +965,31 @@ export function renderRouterDashboard(state, deps = {}) {
         lines.push(rowText)
       }
     }
+  }
+
+  // 📖 Toggle Daemon Button
+  lines.push('')
+  const btnCursor = favorites.length
+  const isBtnCursor = cursor === btnCursor
+  const btnText = isStopped ? '▶ Start Router Daemon' : '⏹ Stop Router Daemon'
+  const btnRowText = `  [ ${btnText} ]`
+  
+  if (isBtnCursor) {
+    lines.push(themeColors.bgCursor(btnRowText + ' '.repeat(Math.max(0, width - displayWidth(btnRowText) - 3))))
+  } else {
+    lines.push(btnRowText)
+  }
+
+  // 📖 Install Endpoint Button
+  const installBtnCursor = favorites.length + 1
+  const isInstallBtnCursor = cursor === installBtnCursor
+  const installBtnText = '🔌 Install Router Endpoint to CLI Tool'
+  const installBtnRowText = `  [ ${installBtnText} ]`
+  
+  if (isInstallBtnCursor) {
+    lines.push(themeColors.bgCursor(installBtnRowText + ' '.repeat(Math.max(0, width - displayWidth(installBtnRowText) - 3))))
+  } else {
+    lines.push(installBtnRowText)
   }
 
   lines.push('')
@@ -958,7 +1035,7 @@ export function renderRouterDashboard(state, deps = {}) {
   // ── Error/Notice display ────────────────────────────────────────────────────
   if (state.routerDashboardError && isStopped) {
     lines.push('')
-    lines.push(`  ${themeColors.dim('Start the daemon with:')} ${themeColors.info('free-coding-models --daemon-bg')}`)
+    lines.push(`  ${themeColors.dim('Press')} ${themeColors.hotkey('S')} ${themeColors.dim('to start it now.')}`)
   } else if (state.routerDashboardError) {
     lines.push('')
     lines.push(`  ${themeColors.warning(state.routerDashboardError)}`)
@@ -971,7 +1048,7 @@ export function renderRouterDashboard(state, deps = {}) {
 
   // ── Footer ──────────────────────────────────────────────────────────────────
   lines.push('')
-  lines.push(`  ${themeColors.hotkey('↑↓')} ${themeColors.dim('Navigate')}  ${themeColors.dim('•')}  ${themeColors.hotkey('Ctrl+↑↓')} ${themeColors.dim('Reorder')}  ${themeColors.dim('•')}  ${themeColors.hotkey('I')} ${themeColors.dim(`Health check: ${probeLabel}`)}  ${themeColors.dim('•')}  ${themeColors.hotkey('C')} ${themeColors.dim('Clear log')}  ${themeColors.dim('•')}  ${themeColors.hotkey('Esc')} ${themeColors.dim('Back')}`)
+  lines.push(`  ${themeColors.hotkey('↑↓')} ${themeColors.dim('Navigate')}  ${themeColors.dim('•')}  ${themeColors.hotkey('Shift+↑↓')} ${themeColors.dim('Reorder')}  ${themeColors.dim('•')}  ${themeColors.hotkey('S')} ${themeColors.dim(isStopped ? 'Start daemon' : 'Stop daemon')}  ${themeColors.dim('•')}  ${themeColors.hotkey('I')} ${themeColors.dim(`Health check: ${probeLabel}`)}  ${themeColors.dim('•')}  ${themeColors.hotkey('C')} ${themeColors.dim('Clear log')}  ${themeColors.dim('•')}  ${themeColors.hotkey('Esc')} ${themeColors.dim('Back')}`)
 
   const { visible, offset } = sliceOverlayLines(lines, state.routerDashboardScrollOffset || 0, state.terminalRows || 24)
   state.routerDashboardScrollOffset = offset

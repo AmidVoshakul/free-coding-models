@@ -637,7 +637,8 @@ class RouterRuntime {
   reloadConfigFromDisk() {
     try {
       const nextConfig = loadConfig()
-      if (!nextConfig.router) nextConfig.router = this.routerConfig()
+      // 📖 Always rebuild the router set from favorites so UI toggles apply dynamically
+      ensureRouterConfigForDaemon(nextConfig, true)
       this.config = nextConfig
       this.refreshRouteState()
       this.scheduleProbeLoop()
@@ -649,12 +650,10 @@ class RouterRuntime {
   }
 
   getApiKeyForProvider(providerKey) {
-    // 📖 Router background startup should work without inherited shell env, so
-    // 📖 config keys are primary. Env is only a fallback for headless sessions.
     const configured = this.config?.apiKeys?.[providerKey]
     if (Array.isArray(configured)) return configured.find(Boolean) || null
     if (typeof configured === 'string' && configured.trim()) return configured.trim()
-    return getApiKey({ apiKeys: {}, providers: {} }, providerKey)
+    return null
   }
 
   getSet(setName = null) {
@@ -1052,15 +1051,18 @@ class RouterRuntime {
       let errorCode = 'all_models_unavailable'
       let errorType = 'service_unavailable'
       if (health.length > 0) {
-        if (health.every((h) => h.state === 'AUTH_ERROR')) {
+        const allAuthError = health.length > 0 && health.every((h) => h.state === 'AUTH_ERROR')
+        const allAuthOrQuota = health.length > 0 && health.every((h) => h.state === 'AUTH_ERROR' || quotaExhausted.includes(h.key))
+        const allStaleOrUnsupported = health.every((h) => h.state === 'STALE' || h.state === 'UNSUPPORTED')
+        if (allAuthError) {
           statusCode = 401
           errorCode = 'invalid_api_key'
           errorType = 'invalid_request_error'
-        } else if (health.every((h) => h.state === 'AUTH_ERROR' || quotaExhausted.includes(h.key))) {
+        } else if (allAuthOrQuota) {
           statusCode = 429
           errorCode = 'insufficient_quota'
           errorType = 'insufficient_quota'
-        } else if (health.every((h) => h.state === 'STALE' || h.state === 'UNSUPPORTED')) {
+        } else if (allStaleOrUnsupported) {
           statusCode = 400
           errorCode = 'invalid_model'
           errorType = 'invalid_request_error'
@@ -1808,7 +1810,7 @@ export function createRouterRuntimeForTest({ config, port = 0, logger = null, to
   })
 }
 
-function ensureRouterConfigForDaemon(config) {
+function ensureRouterConfigForDaemon(config, skipSave = false) {
   // 📖 Always rebuild from favorites or defaults — no more manual set management
   const favSet = buildRouterSetFromFavorites(config)
   const activeSet = favSet || buildDefaultRouterSet(config)
@@ -1819,7 +1821,7 @@ function ensureRouterConfigForDaemon(config) {
     activeSet: activeSet.name,
     sets: { [activeSet.name]: activeSet },
   })
-  saveConfig(config)
+  if (!skipSave) saveConfig(config)
   return config.router
 }
 
