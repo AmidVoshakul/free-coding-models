@@ -1069,14 +1069,22 @@ export function createKeyHandler(ctx) {
   function resetViewSettings() {
     state.tierFilterMode = 0
     state.originFilterMode = 0
+    state.verdictFilterMode = 0
+    state.healthFilterMode = 0
     state.customTextFilter = null  // 📖 Clear ephemeral text filter on view reset
-    state.sortColumn = 'avg'
+    state.hideUnconfiguredModels = false
+    state.bestModeOnly = false
+    state.sortColumn = 'condition'  // 📖 Default sort: Health
     state.sortDirection = 'asc'
+    state.favoritesPinnedAndSticky = false
+    state.cursor = 0
+    state.scrollOffset = 0
     if (!state.config.settings || typeof state.config.settings !== 'object') state.config.settings = {}
     delete state.config.settings.tierFilter
     delete state.config.settings.originFilter
     delete state.config.settings.sortColumn
     delete state.config.settings.sortAsc
+    state.config.settings.hideUnconfiguredModels = false
     saveConfig(state.config)
     applyTierFilter()
     refreshVisibleSorted({ resetCursor: true })
@@ -2732,10 +2740,23 @@ export function createKeyHandler(ctx) {
       return
     }
 
-    // 📖 E toggles "Show only configured & working models": hides models whose provider has no configured API key, or whose health status is noauth/auth_error (but keeps timeout and 429).
-    // 📖 The preference is saved globally.
+    // 📖 E cycles: Normal → Working only → Best mode → Normal
+    // 📖 Working only: hides models with no key or noauth/auth_error health
+    // 📖 Best mode: only shows models with Health UP and Verdict ≤ Slow (Perfect/Normal/Slow)
     if (key.name === 'e') {
-      state.hideUnconfiguredModels = !state.hideUnconfiguredModels
+      if (!state.hideUnconfiguredModels && !state.bestModeOnly) {
+        // Normal → Working only
+        state.hideUnconfiguredModels = true
+        state.bestModeOnly = false
+      } else if (state.hideUnconfiguredModels && !state.bestModeOnly) {
+        // Working only → Best mode
+        state.hideUnconfiguredModels = false
+        state.bestModeOnly = true
+      } else {
+        // Best mode → Normal
+        state.hideUnconfiguredModels = false
+        state.bestModeOnly = false
+      }
       if (!state.config.settings || typeof state.config.settings !== 'object') state.config.settings = {}
       state.config.settings.hideUnconfiguredModels = state.hideUnconfiguredModels
       saveConfig(state.config)
@@ -2789,15 +2810,9 @@ export function createKeyHandler(ctx) {
       return
     }
 
-    // 📖 Changelog overlay key: N = toggle changelog overlay
+    // 📖 Reset view key: N = reset all filters and sort back to default (Health)
     if (key.name === 'n') {
-      state.changelogOpen = !state.changelogOpen
-      if (state.changelogOpen) {
-        state.changelogScrollOffset = 0
-        state.changelogPhase = 'index'
-        state.changelogCursor = 0
-        state.changelogSelectedVersion = null
-      }
+      resetViewSettings()
       return
     }
 

@@ -928,7 +928,7 @@ export function createOverlayRenderers(state, deps) {
     lines.push(`  ${heading('Controls')}`)
     lines.push(`  ${key('W')}  Toggle ping mode  ${hint('(speed 2s → normal 10s → slow 30s → forced 4s)')}`)
     lines.push(`  ${key('Ctrl+P')}  Open ⚡️ command palette  ${hint('(search and run actions quickly)')}`)
-    lines.push(`  ${key('E')}  Toggle configured models only  ${hint('(enabled by default)')}`)
+    lines.push(`  ${key('E')}  Cycle filter mode  ${hint('(Normal → Working only → Best mode)')}`)
     lines.push(`  ${key('Z')}  Cycle tool mode  ${hint('(📦 OpenCode → π Pi → 🪼 jcode → 📦 Desktop → 🦞 OpenClaw → 💘 Crush → 🪿 Goose → 🛠 Aider → 🐉 Qwen → 🤲 OpenHands → ⚡ Amp → 🦘 Rovo → ♊ Gemini)')}`)
     lines.push(`  ${key('F')}  Toggle favorite on selected row  ${hint('(1️⃣2️⃣3️⃣ = router fallback order, capped at 🔟)')}`)
     lines.push(`  ${key('⇧↑/⇧↓')}  Reorder selected favorite up/down  ${hint('(changes router priority)')}`)
@@ -940,7 +940,7 @@ export function createOverlayRenderers(state, deps) {
     lines.push(`  ${key('P')}  Open settings  ${hint('(manage API keys, provider toggles, updates, legacy cleanup)')}`)
       // 📖 Profile system removed - API keys now persist permanently across all sessions
     lines.push(`  ${key('Ctrl+P')}  Reset view settings  ${hint('(search "Reset view" in the command palette)')}`)
-    lines.push(`  ${key('N')}  Changelog  ${hint('(📋 browse all versions, Enter to view details)')}`)
+    lines.push(`  ${key('N')}  Reset view  ${hint('(🔄 reset all filters & sort back to default)')}`)
     lines.push(`  ${key('I')} / ${key('Esc')}  Show/hide this help`)
     lines.push(`  ${key('Ctrl+C')}  Exit`)
     lines.push('')

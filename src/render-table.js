@@ -104,7 +104,7 @@ export const PROVIDER_COLOR = new Proxy({}, {
 })
 
 // ─── renderTable: mode param controls footer hint text (opencode vs openclaw) ─────────
-export function renderTable(results, pendingPings, frame, cursor = null, sortColumn = 'avg', sortDirection = 'asc', pingInterval = PING_INTERVAL, lastPingTime = Date.now(), mode = 'opencode', tierFilterMode = 0, scrollOffset = 0, terminalRows = 0, terminalCols = 0, originFilterMode = 0, legacyStatus = null, pingMode = 'normal', pingModeSource = 'auto', hideUnconfiguredModels = false, widthWarningStartedAt = null, widthWarningDismissed = false, widthWarningShowCount = 0, settingsUpdateState = 'idle', settingsUpdateLatestVersion = null, legacyFlag = false, startupLatestVersion = null, versionAlertsEnabled = true, favoritesPinnedAndSticky = false, customTextFilter = null, lastReleaseDate = null, legacyFooterHidden = false, verdictFilterMode = 0, healthFilterMode = 0, routerFooterRunning = false, routerFooterActiveSet = null, routerFooterTodayTokens = 0, routerFooterAllTimeTokens = 0, routerFooterRequests = 0) {
+export function renderTable(results, pendingPings, frame, cursor = null, sortColumn = 'avg', sortDirection = 'asc', pingInterval = PING_INTERVAL, lastPingTime = Date.now(), mode = 'opencode', tierFilterMode = 0, scrollOffset = 0, terminalRows = 0, terminalCols = 0, originFilterMode = 0, legacyStatus = null, pingMode = 'normal', pingModeSource = 'auto', hideUnconfiguredModels = false, widthWarningStartedAt = null, widthWarningDismissed = false, widthWarningShowCount = 0, settingsUpdateState = 'idle', settingsUpdateLatestVersion = null, legacyFlag = false, startupLatestVersion = null, versionAlertsEnabled = true, favoritesPinnedAndSticky = false, customTextFilter = null, lastReleaseDate = null, legacyFooterHidden = false, verdictFilterMode = 0, healthFilterMode = 0, bestModeOnly = false, routerFooterRunning = false, routerFooterActiveSet = null, routerFooterTodayTokens = 0, routerFooterAllTimeTokens = 0, routerFooterRequests = 0) {
   // 📖 Filter out hidden models for display
   const visibleResults = results.filter(r => !r.hidden)
   void legacyFooterHidden
@@ -747,6 +747,9 @@ export function renderTable(results, pendingPings, frame, cursor = null, sortCol
   // 📖 Active filter pills use a loud green background so tier/provider/configured-only
   // 📖 states are obvious even when the user misses the smaller header badges.
   const configuredBadgeBg = getTheme() === 'dark' ? [52, 120, 88] : [195, 234, 206]
+
+  const configuredFilterActive = hideUnconfiguredModels || bestModeOnly
+  const configuredFilterLabel = bestModeOnly ? 'E Best mode' : (hideUnconfiguredModels ? 'E Working only' : 'E Active only')
   const activeHotkey = (keyLabel, text, bg) => themeColors.badge(`${keyLabel}${text}`, bg, getReadableTextRgb(bg))
 
   // 📖 Mouse support: build footer hotkey zones alongside the footer lines.
@@ -767,11 +770,13 @@ export function renderTable(results, pendingPings, frame, cursor = null, sortCol
       { text: '  •  ', key: null },
       { text: originFilterMode > 0 ? `D Provider (${activeOriginLabel})` : 'D Provider', key: 'd' },
       { text: '  •  ', key: null },
-      { text: 'E Active only', key: 'e' },
+      { text: configuredFilterActive ? configuredFilterLabel : 'E Active only', key: 'e' },
       { text: '  •  ', key: null },
       { text: 'P Settings', key: 'p' },
       { text: '  •  ', key: null },
       { text: 'I Help', key: 'i' },
+      { text: '  •  ', key: null },
+      { text: 'N Reset', key: 'n' },
     ]
     const footerRow1 = lines.length + 1 // 📖 1-based terminal row (line hasn't been pushed yet)
     let xPos = 1
@@ -795,11 +800,15 @@ export function renderTable(results, pendingPings, frame, cursor = null, sortCol
       ? activeHotkey('D', ` Provider (${activeOriginLabel})`, PROVIDER_COLOR[[null, ...Object.keys(sources)][originFilterMode]] || [255, 255, 255])
       : hotkey('D', ' Provider')) +
     themeColors.dim(`  •  `) +
-    (hideUnconfiguredModels ? activeHotkey('E', ' Working only', configuredBadgeBg) : hotkey('E', ' Working only')) +
+    (configuredFilterActive
+      ? activeHotkey('E', `${configuredFilterLabel.slice(2)}`, configuredBadgeBg)
+      : hotkey('E', ' Active only')) +
     themeColors.dim(`  •  `) +
     hotkey('P', ' Settings') +
     themeColors.dim(`  •  `) +
-    hotkey('I', ' Help')
+    hotkey('I', ' Help') +
+    themeColors.dim(`  •  `) +
+    hotkey('N', ' Reset')
   )
 
   // 📖 Line 2: command palette + GitHub

@@ -201,13 +201,13 @@ const BASE_COMMAND_TREE = [
         ],
       },
       { id: 'action-cycle-theme', label: 'Cycle theme', shortcut: 'G', icon: '🌗', description: 'Switch dark/light/auto', keywords: ['theme', 'dark', 'light', 'auto'] },
-      { id: 'action-reset-view', label: 'Reset view', icon: '🔄', description: 'Reset filters and sort', keywords: ['reset', 'view', 'sort', 'filters'] },
+      { id: 'action-reset-view', label: 'Reset view', shortcut: 'N', icon: '🔄', description: 'Reset filters and sort', keywords: ['reset', 'view', 'sort', 'filters'] },
     ],
   },
   // 📖 Pages - directly at root level, not in submenu
   { id: 'open-settings', label: 'Settings', shortcut: 'P', icon: '⚙️', type: 'page', description: 'API keys and preferences', keywords: ['settings', 'config', 'api key'] },
   { id: 'open-help', label: 'Help', shortcut: 'K', icon: '❓', type: 'page', description: 'Show all shortcuts', keywords: ['help', 'shortcuts', 'hotkeys'] },
-  { id: 'open-changelog', label: 'Changelog', shortcut: 'N', icon: '📋', type: 'page', description: 'Version history', keywords: ['changelog', 'release'] },
+  { id: 'open-changelog', label: 'Changelog', icon: '📋', type: 'page', description: 'Version history', keywords: ['changelog', 'release'] },
 
   { id: 'open-recommend', label: 'Smart recommend', shortcut: 'Q', icon: '🎯', type: 'page', description: 'Find best model for task', keywords: ['recommend', 'best model'] },
   { id: 'open-install-endpoints', label: 'Install endpoints', icon: '🔌', type: 'page', description: 'Install provider catalogs', keywords: ['install', 'endpoints', 'providers'] },

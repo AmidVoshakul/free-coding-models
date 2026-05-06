@@ -437,6 +437,7 @@ export async function runApp(cliArgs, config) {
     verdictFilterMode: 0,        // 📖 Index into VERDICT_CYCLE (0=All, then verdicts)
     healthFilterMode: 0,          // 📖 Index into HEALTH_CYCLE (0=All, then health states)
     hideUnconfiguredModels: config.settings?.hideUnconfiguredModels === true, // 📖 Hide providers with no configured API key when true.
+    bestModeOnly: false,          // 📖 E cycles Normal → Working only → Best mode (Health UP + Verdict ≤ Slow)
     favoritesPinnedAndSticky: config.settings?.favoritesPinnedAndSticky === true, // 📖 false by default: favorites follow normal sort/filter rules until Y enables pinned+sticky mode.
       scrollOffset: 0,              // 📖 First visible model index in viewport
       terminalRows: process.stdout.rows || 24,  // 📖 Current terminal height
@@ -792,6 +793,16 @@ if (unconfiguredHide) {
   r.hidden = true
   return
 }
+// 📖 Best mode: only show models with Health UP and Verdict Perfect/Normal/Slow
+if (state.bestModeOnly) {
+  const bmVerdict = getVerdict(r)
+  const bmVerdictOk = ['Perfect', 'Normal', 'Slow'].includes(bmVerdict)
+  const bmHealthOk = r.status === 'up'
+  if (!bmHealthOk || !bmVerdictOk) {
+    r.hidden = true
+    return
+  }
+}
       // 📖 Apply tier, origin, verdict, and health filters — model is hidden if it fails any
       const allowedTiers = (activeTier && TIER_LETTER_MAP[activeTier]) ? TIER_LETTER_MAP[activeTier] : [activeTier]
       const tierHide = activeTier !== null && !allowedTiers.includes(r.tier)
@@ -1091,8 +1102,9 @@ if (unconfiguredHide) {
           state.customTextFilter,
           state.lastReleaseDate,
           false,
-          state.verdictFilterMode,
-          state.healthFilterMode
+           state.verdictFilterMode,
+          state.healthFilterMode,
+          state.bestModeOnly
         )
       }
       tableContent = state.commandPaletteFrozenTable
@@ -1129,8 +1141,9 @@ if (unconfiguredHide) {
         state.customTextFilter,
         state.lastReleaseDate,
         false,
-        state.verdictFilterMode,
-        state.healthFilterMode
+         state.verdictFilterMode,
+        state.healthFilterMode,
+        state.bestModeOnly
       )
     }
 
@@ -1178,7 +1191,7 @@ if (unconfiguredHide) {
     pinFavorites: state.favoritesPinnedAndSticky,
   })
 
-      process.stdout.write(ALT_HOME + renderTable(state.results, state.pendingPings, state.frame, state.cursor, state.sortColumn, state.sortDirection, state.pingInterval, state.lastPingTime, state.mode, state.tierFilterMode, state.scrollOffset, state.terminalRows, state.terminalCols, state.originFilterMode, null, state.pingMode, state.pingModeSource, state.hideUnconfiguredModels, state.widthWarningStartedAt, state.widthWarningDismissed, state.widthWarningShowCount, state.settingsUpdateState, state.settingsUpdateLatestVersion, false, state.startupLatestVersion, state.versionAlertsEnabled, state.favoritesPinnedAndSticky, state.customTextFilter, state.lastReleaseDate, false, state.verdictFilterMode, state.healthFilterMode))
+      process.stdout.write(ALT_HOME + renderTable(state.results, state.pendingPings, state.frame, state.cursor, state.sortColumn, state.sortDirection, state.pingInterval, state.lastPingTime, state.mode, state.tierFilterMode, state.scrollOffset, state.terminalRows, state.terminalCols, state.originFilterMode, null, state.pingMode, state.pingModeSource, state.hideUnconfiguredModels, state.widthWarningStartedAt, state.widthWarningDismissed, state.widthWarningShowCount, state.settingsUpdateState, state.settingsUpdateLatestVersion, false, state.startupLatestVersion, state.versionAlertsEnabled, state.favoritesPinnedAndSticky, state.customTextFilter, state.lastReleaseDate, false, state.verdictFilterMode, state.healthFilterMode, state.bestModeOnly))
   if (process.stdout.isTTY) {
     process.stdout.flush && process.stdout.flush()
   }
