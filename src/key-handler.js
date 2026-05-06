@@ -2740,20 +2740,20 @@ export function createKeyHandler(ctx) {
       return
     }
 
-    // 📖 E cycles: Normal → Working only → Best mode → Normal
-    // 📖 Working only: hides models with no key or noauth/auth_error health
-    // 📖 Best mode: only shows models with Health UP and Verdict ≤ Slow (Perfect/Normal/Slow)
+    // 📖 E cycles: Normal → Configured only → Usable only → Normal
+    // 📖 Configured only: hides models with no key or noauth/auth_error health
+    // 📖 Usable only: only shows models with Health UP and Verdict ≤ Slow (Perfect/Normal/Slow)
     if (key.name === 'e') {
       if (!state.hideUnconfiguredModels && !state.bestModeOnly) {
-        // Normal → Working only
+        // Normal → Configured only
         state.hideUnconfiguredModels = true
         state.bestModeOnly = false
       } else if (state.hideUnconfiguredModels && !state.bestModeOnly) {
-        // Working only → Best mode
+        // Configured only → Usable only
         state.hideUnconfiguredModels = false
         state.bestModeOnly = true
       } else {
-        // Best mode → Normal
+        // Usable only → Normal
         state.hideUnconfiguredModels = false
         state.bestModeOnly = false
       }

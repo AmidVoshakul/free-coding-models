@@ -437,7 +437,7 @@ export async function runApp(cliArgs, config) {
     verdictFilterMode: 0,        // 📖 Index into VERDICT_CYCLE (0=All, then verdicts)
     healthFilterMode: 0,          // 📖 Index into HEALTH_CYCLE (0=All, then health states)
     hideUnconfiguredModels: config.settings?.hideUnconfiguredModels === true, // 📖 Hide providers with no configured API key when true.
-    bestModeOnly: false,          // 📖 E cycles Normal → Working only → Best mode (Health UP + Verdict ≤ Slow)
+    bestModeOnly: false,          // 📖 E cycles Normal → Configured only → Usable only (Health UP + Verdict ≤ Slow)
     favoritesPinnedAndSticky: config.settings?.favoritesPinnedAndSticky === true, // 📖 false by default: favorites follow normal sort/filter rules until Y enables pinned+sticky mode.
       scrollOffset: 0,              // 📖 First visible model index in viewport
       terminalRows: process.stdout.rows || 24,  // 📖 Current terminal height
@@ -793,7 +793,7 @@ if (unconfiguredHide) {
   r.hidden = true
   return
 }
-// 📖 Best mode: only show models with Health UP and Verdict Perfect/Normal/Slow
+// 📖 Usable only: only show models with Health UP and Verdict Perfect/Normal/Slow
 if (state.bestModeOnly) {
   const bmVerdict = getVerdict(r)
   const bmVerdictOk = ['Perfect', 'Normal', 'Slow'].includes(bmVerdict)

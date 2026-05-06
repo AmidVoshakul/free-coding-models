@@ -749,8 +749,9 @@ export function renderTable(results, pendingPings, frame, cursor = null, sortCol
   const configuredBadgeBg = getTheme() === 'dark' ? [52, 120, 88] : [195, 234, 206]
 
   const configuredFilterActive = hideUnconfiguredModels || bestModeOnly
-  const configuredFilterLabel = bestModeOnly ? 'E Best mode' : (hideUnconfiguredModels ? 'E Working only' : 'E Active only')
+  const configuredFilterText = bestModeOnly ? 'Usable only' : (hideUnconfiguredModels ? 'Configured only' : 'Active only')
   const activeHotkey = (keyLabel, text, bg) => themeColors.badge(`${keyLabel}${text}`, bg, getReadableTextRgb(bg))
+  const activeFilterHotkey = (keyLabel, text, bg) => themeColors.hotkey(keyLabel) + themeColors.badge(text, bg, getReadableTextRgb(bg))
 
   // 📖 Mouse support: build footer hotkey zones alongside the footer lines.
   // 📖 Each zone records { key, row (1-based terminal row), xStart, xEnd (1-based display cols) }.
@@ -770,7 +771,7 @@ export function renderTable(results, pendingPings, frame, cursor = null, sortCol
       { text: '  •  ', key: null },
       { text: originFilterMode > 0 ? `D Provider (${activeOriginLabel})` : 'D Provider', key: 'd' },
       { text: '  •  ', key: null },
-      { text: configuredFilterActive ? configuredFilterLabel : 'E Active only', key: 'e' },
+      { text: `E ${configuredFilterText}`, key: 'e' },
       { text: '  •  ', key: null },
       { text: 'P Settings', key: 'p' },
       { text: '  •  ', key: null },
@@ -801,7 +802,7 @@ export function renderTable(results, pendingPings, frame, cursor = null, sortCol
       : hotkey('D', ' Provider')) +
     themeColors.dim(`  •  `) +
     (configuredFilterActive
-      ? activeHotkey('E', `${configuredFilterLabel.slice(2)}`, configuredBadgeBg)
+      ? activeFilterHotkey('E', configuredFilterText, configuredBadgeBg)
       : hotkey('E', ' Active only')) +
     themeColors.dim(`  •  `) +
     hotkey('P', ' Settings') +
