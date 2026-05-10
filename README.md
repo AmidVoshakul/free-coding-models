@@ -1,24 +1,20 @@
-<table>
-  <tr>
-    <td style="vertical-align: middle; width: 200px;">
-      <img src="logo.webp" alt="free-coding-models logo" width="128"><br><br>
-      <img src="https://img.shields.io/npm/v/free-coding-models?color=3d6b00&label=npm&logo=npm" alt="npm version" width="200"><br>
-      <img src="https://img.shields.io/node/v/free-coding-models?color=3d6b00&logo=node.js" alt="node version" width="200"><br>
-      <img src="https://img.shields.io/npm/l/free-coding-models?color=3d6b00" alt="license" width="200"><br>
-      <img src="https://img.shields.io/badge/models-170+-3d6b00?logo=nvidia" alt="models count" width="200"><br>
-      <img src="https://img.shields.io/badge/providers-16-1a56db" alt="providers count" width="200">
-    </td>
-    <td style="vertical-align: middle;">
+ <img src="logo.webp" alt="free-coding-models logo" width="328">
+
       <h1 style="margin-top: 0;">free-coding-models</h1>
       <strong>Find the fastest free coding model in seconds</strong><br>
       Track ~170 models across ~15 trusted free or free-limited AI providers in real time<br><br>
       <strong>Install Free API endpoints to your favorite AI coding tools:</strong><br>
       OpenCode CLI / Desktop / WebUI, OpenClaw, Crush, Goose, Aider, Kilo CLI, Qwen Code, OpenHands, Amp, Hermes, Continue, Cline, Xcode, Pi, Rovo, Gemini and more...<br><br>
       <strong>Use Kimi K2, DeepSeek V3, GPT-OSS, Qwen3, MiniMax M2, GLM, Llama 4, Gemma 4, Devstral and more — for free</strong>
-    </td>
-  </tr>
-</table>
 
+
+
+    
+      <img src="https://img.shields.io/npm/v/free-coding-models?color=3d6b00&label=npm&logo=npm" alt="npm version" width="200"><br>
+      <img src="https://img.shields.io/node/v/free-coding-models?color=3d6b00&logo=node.js" alt="node version" width="200"><br>
+      <img src="https://img.shields.io/npm/l/free-coding-models?color=3d6b00" alt="license" width="200"><br>
+      <img src="https://img.shields.io/badge/models-170+-3d6b00?logo=nvidia" alt="models count" width="200"><br>
+      <img src="https://img.shields.io/badge/providers-16-1a56db" alt="providers count" width="200">
 
 
 
