@@ -78,40 +78,30 @@ When new PRs are merged, add the contributor's GitHub handle to the footer in `b
 - @whit3rabbit
 - @PhucTruong-ctrl
 
-## Testing the TUI with agent-tui
+## Testing the TUI with tmux
 
-The project's TUI is built with raw ANSI escape codes + chalk. To visually test TUI behavior, use **agent-tui** — a PTY-based TUI automation tool that lets the AI agent spawn, screenshot, and interact with the terminal app.
+The project's TUI is built with raw ANSI escape codes + chalk. To visually test TUI behavior, use **tmux** — pre-installed on macOS and provides native PTY support.
 
 ### Setup
 
-`agent-tui` is installed as a devDependency (`pnpm add -D agent-tui`). All commands run through `npx agent-tui`.
-
-**One-time:** Start the daemon before any TUI testing session:
-
-```bash
-npx agent-tui daemon start
-```
+No setup needed — tmux is already installed. Just spawn sessions and send keys.
 
 ### Core Commands
 
-All commands below use `npx agent-tui <command>`. The daemon manages sessions in the background.
-
 | Command | What it does |
 |---------|-------------|
-| `npx agent-tui run --cols 120 --rows 40 -- node bin/free-coding-models.js` | Spawn the TUI in a virtual terminal |
-| `npx agent-tui run -- node /full/path/to/bin/free-coding-models.js --tier S` | Spawn with CLI flags (use full path) |
-| `npx agent-tui screenshot` | Capture current screen as text |
-| `npx agent-tui screenshot --strip-ansi` | Capture screen without ANSI colors |
-| `npx agent-tui screenshot --json` | Capture as JSON (includes session_id) |
-| `npx agent-tui press T` | Send a key press |
-| `npx agent-tui press ArrowDown ArrowDown Enter` | Send multiple keys |
-| `npx agent-tui press Ctrl+C` | Send Ctrl+C |
-| `npx agent-tui type "search text"` | Type literal text |
-| `npx agent-tui wait "Provider" -t 5000` | Wait for text to appear (5s timeout) |
-| `npx agent-tui wait --stable` | Wait for screen to stop changing |
-| `npx agent-tui kill` | Kill the current session |
-| `npx agent-tui sessions` | List active sessions |
-| `npx agent-tui sessions cleanup --all` | Clean up all dead sessions |
+| `tmux new-session -d -s <name> "pnpm start"` | Spawn the TUI in a detached session |
+| `tmux send-keys -t <name> "keys"` | Send keypresses to the session |
+| `tmux send-keys -t <name> C-c` | Send Ctrl+C |
+| `tmux send-keys -t <name> Escape` | Send Escape |
+| `tmux send-keys -t <name> Up` | Send ArrowUp |
+| `tmux send-keys -t <name> Down` | Send ArrowDown |
+| `tmux send-keys -t <name> Enter` | Send Enter |
+| `tmux capture-pane -p -t <name>` | Capture current screen as text |
+| `tmux capture-pane -p -t <name> -S -200` | Capture with scrollback (200 lines) |
+| `tmux kill-session -t <name>` | Kill the session |
+| `tmux attach -t <name>` | Connect to session (watch live) |
+| `tmux attach -t <name> -r` | Connect read-only |
 
 ### Key Reference
 
@@ -134,56 +124,94 @@ All commands below use `npx agent-tui <command>`. The daemon manages sessions in
 | `↑`/`↓` | Navigate rows | Move cursor up/down |
 | `Enter` | Select model | Choose model |
 | `Ctrl+C` | Exit | Quit the TUI |
+| `Ctrl+P` | Command Palette | Open cmd palette |
+| `Esc` | Close modal/dialog | Close palette, settings, help |
 
 ### Example Test Flow
 
 ```bash
-# 1. Ensure daemon is running
-npx agent-tui daemon start
+# 1. Spawn the TUI in a detached session
+tmux new-session -d -s fcm-test "cd /Users/vava/Documents/GitHub/free-coding-models && pnpm start"
 
-# 2. Spawn the TUI (use full path)
-npx agent-tui run --cols 120 --rows 40 -- node /Users/vava/Documents/GitHub/free-coding-models/bin/free-coding-models.js
+# 2. Wait for it to render, then capture
+sleep 2
+tmux capture-pane -p -t fcm-test
 
-# 3. Wait for it to render, then screenshot
-npx agent-tui wait --stable
-npx agent-tui screenshot --strip-ansi
+# 3. Test tier filter — press T, wait, verify
+tmux send-keys -t fcm-test "T"
+sleep 1
+tmux capture-pane -p -t fcm-test | tail -20
 
-# 4. Test tier filter — press T, wait, verify
-npx agent-tui press T
-npx agent-tui wait --stable
-npx agent-tui screenshot --strip-ansi
+# 4. Test cmd palette — Ctrl+P
+tmux send-keys -t fcm-test C-p
+sleep 1
+tmux capture-pane -p -t fcm-test | tail -25
 
-# 5. Test navigation — press Down twice
-npx agent-tui press ArrowDown ArrowDown
-npx agent-tui wait --stable
-npx agent-tui screenshot --strip-ansi
+# 5. Close with Escape
+tmux send-keys -t fcm-test Escape
+sleep 1
 
-# 6. Clean up
-npx agent-tui kill
+# 6. Test navigation — scroll down
+for i in {1..5}; do
+  tmux send-keys -t fcm-test Down
+  sleep 1
+  tmux capture-pane -p -t fcm-test | tail -15
+done
+
+# 7. Connect to watch live
+tmux attach -t fcm-test
+
+# 8. Clean up
+tmux kill-session -t fcm-test
 ```
 
-### When Should the Agent Use agent-tui?
+### Watch Live While Testing
 
-Use `agent-tui` when:
+```bash
+# Terminal 1: spawn and let it run
+tmux new-session -d -s fcm-live "cd /path/to/project && pnpm start"
 
+# Terminal 2: watch the live session
+tmux attach -t fcm-live
+
+# From anywhere, send keys to test while watching in Terminal 2
+tmux send-keys -t fcm-live "T"  # cycle tier
+tmux send-keys -t fcm-live C-p  # open palette
+```
+
+### Tips
+
+- Use `sleep 1` after `send-keys` to let the TUI re-render before capturing
+- `tmux capture-pane -p` outputs ANSI codes — pipe through `cat -v` or strip with a tool if you need clean text
+- Sessions persist — you can detach (`Ctrl+b d`) and re-attach later
+- Use `tmux list-sessions` to see all active sessions
+- For read-only watching (no accidental input): `tmux attach -t <name> -r`
+
+### When Should the Agent Use tmux Testing?
+
+Use tmux when:
 - **Visual Testing Needed** — Changes affect TUI rendering, layout, colors, or formatting
 - **Interaction Testing** — New keypress handlers, filters, or navigation logic
 - **Regression Detection** — Verify existing flows still work after code changes
 - **User-Facing Features** — Settings screen, mode switching, tier filtering
+- **Live Demo** — Let the user watch the TUI run in real-time
 
-**Do NOT use agent-tui** for:
+**Do NOT use tmux testing** for:
 - Unit test verification (use `pnpm test` instead)
 - Code-only logic changes (use tests for pure functions)
 - Build errors (use `pnpm build:web` or `pnpm start`)
 
-### Tips
+### Why tmux over agent-tui?
 
-- Always `npx agent-tui daemon start` before the first `run` — it's idempotent (no-op if already running)
-- Use `--strip-ansi` for screenshots you want to parse/log — removes color codes
-- Use `--json` for programmatic parsing of screenshot data
-- Use `npx agent-tui wait --stable` after key presses to avoid reading mid-render
-- Use `npx agent-tui sessions cleanup --all` if sessions get stuck
-- The daemon persists across test runs — no need to restart between sessions
+| tmux | agent-tui |
+|------|-----------|
+| Pre-installed on macOS | Extra npm dependency |
+| Zero config | Needs daemon setup |
+| `tmux send-keys` is simple | Custom CLI wrapper |
+| `tmux capture-pane` is direct | Screenshot API |
+| Native PTY, no latency | Additional abstraction layer |
+| Sessions persist, can re-attach | Ephemeral sessions |
+| Can watch live in another terminal | Must use screenshots |
 
 ---
 
