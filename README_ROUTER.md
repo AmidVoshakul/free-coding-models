@@ -67,5 +67,10 @@ Press **I** in the Router Dashboard to cycle through health check speeds:
 | `GET /v1/models` | Return virtual models (`fcm`) |
 | `GET /health` | Daemon status JSON |
 | `GET /stats` | Routing, health, request log, and token stats |
-| `GET /stream/events` | Live SSE events for dashboard updates |
+| `GET /stream/events` | Live SSE events |
 | `POST /daemon/probe-mode` | Set health check speed: `{ "probeMode": "eco" | "balanced" | "aggressive" }` |
+| `GET /` | Web dashboard (same port) |
+| `GET /api/models` | Model data with latency stats |
+| `GET /api/config` | Provider config (keys masked) |
+| `GET /api/events` | Live SSE for dashboard |
+| `POST /api/settings` | Save API keys and provider toggles |

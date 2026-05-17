@@ -30,17 +30,19 @@
  */
 
 import { createServer } from 'node:http'
+import { existsSync, readFileSync } from 'node:fs'
+import { dirname, join, resolve as resolvePath } from 'node:path'
 import { fork } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { appendFileSync, existsSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
+import { appendFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { sources } from '../sources.js'
+import { MODELS, sources } from '../sources.js'
 import {
   CONFIG_PATH,
   DEFAULT_ROUTER_SETTINGS,
   getApiKey,
+  isProviderEnabled,
   loadConfig,
   normalizeRouterConfig,
   saveConfig,
@@ -76,7 +78,7 @@ const MAX_SSE_CLIENTS = 10
 const MAX_CONCURRENT_REQUESTS = 50
 const MAX_PROBE_WINDOW = 20
 const TOKEN_FLUSH_INTERVAL_MS = 60000
-const CONFIG_RELOAD_INTERVAL_MS = 60000
+const CONFIG_RELOAD_INTERVAL_MS = 10000
 const STATS_RETENTION_DAYS = 90
 const TIER_ORDER = ['S+', 'S', 'A+', 'A', 'A-', 'B+', 'B', 'C']
 const RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503])
@@ -199,6 +201,200 @@ function isLikelyHtmlText(text) {
 function isLikelyHtmlResponse(headers, text = '') {
   const contentType = getHeaderValue(headers, 'content-type').toLowerCase()
   return contentType.includes('text/html') || isLikelyHtmlText(text)
+}
+
+// ─── Web Dashboard Helpers ─────────────────────────────────────────────────────
+
+function maskApiKey(key) {
+  if (!key || typeof key !== 'string') return ''
+  if (key.length <= 8) return '••••••••'
+  return '••••••••' + key.slice(-4)
+}
+
+// 📖 Same-origin / loopback check for state-changing or secret-revealing
+// 📖 endpoints. Blocks CSRF from malicious tabs and key exfiltration from
+// 📖 cross-origin scripts. Plain CLI calls (curl/fetch without Origin) are
+// 📖 allowed because they cannot be triggered by a browser context.
+function isLoopbackHostname(hostname) {
+  if (!hostname) return false
+  const h = hostname.toLowerCase()
+  return h === 'localhost' || h === '127.0.0.1' || h === '[::1]' || h === '::1' || h.endsWith('.localhost')
+}
+
+function isSameOriginOrLocal(req) {
+  const origin = req.headers.origin
+  const referer = req.headers.referer || req.headers.referrer
+  const candidates = []
+  if (typeof origin === 'string' && origin && origin !== 'null') candidates.push(origin)
+  else if (typeof referer === 'string' && referer) candidates.push(referer)
+
+  // 📖 No Origin/Referer → non-browser caller (curl, native app). Allow.
+  if (candidates.length === 0) return true
+
+  for (const c of candidates) {
+    try {
+      const parsed = new URL(c)
+      if (isLoopbackHostname(parsed.hostname)) return true
+    } catch {
+      return false
+    }
+  }
+  return false
+}
+
+const MIME_TYPES = {
+  '.html': 'text/html; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.js': 'application/javascript; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.ico': 'image/x-icon',
+}
+
+function getWebModelsPayload(runtime) {
+  // 📖 Hoist router + active set lookups out of the per-model loop so we
+  // 📖 don't re-resolve them ~200 times per request.
+  const router = runtime.routerConfig()
+  const activeSet = runtime.getSet(router.activeSet)
+  const inSetIndex = new Set(
+    (activeSet?.models || []).map((m) => `${m.provider}::${m.model}`),
+  )
+
+  const payload = []
+  for (const [providerKey, source] of Object.entries(sources)) {
+    if (!Array.isArray(source.models)) continue
+    const hasApiKey = !!runtime.getApiKeyForProvider(providerKey)
+    for (const [modelId, label, tier, sweScore, ctx] of source.models) {
+      const key = modelKey(providerKey, modelId)
+      const probeWindow = runtime.probeWindows.get(key) || []
+      const pings = probeWindow.map((entry) => ({
+        ms: entry.latencyMs ?? null,
+        code: entry.code ?? (entry.ok ? '200' : 'ERR'),
+      }))
+      const msList = pings.map((p) => p.ms).filter((ms) => typeof ms === 'number' && ms > 0)
+      const avg = msList.length > 0
+        ? msList.reduce((sum, ms) => sum + ms, 0) / msList.length
+        : null
+      const sorted = [...msList].sort((a, b) => a - b)
+      const p95 = sorted.length > 0 ? sorted[Math.floor(sorted.length * 0.95)] : null
+      const jitter = sorted.length > 1
+        ? sorted.slice(1).reduce((sum, v, i) => sum + Math.abs(v - sorted[i]), 0) / (sorted.length - 1)
+        : null
+      const recentOk = pings.filter((p) => typeof p.ms === 'number' && String(p.code) === '200').length
+      const stability = pings.length > 0 ? recentOk / pings.length : null
+      const verdict = avg === null ? '—' : avg < 1000 ? 'Excellent' : avg < 2000 ? 'Good' : avg < 4000 ? 'Fair' : 'Poor'
+      const uptime = pings.length > 0 ? recentOk / pings.length : null
+      payload.push({
+        idx: payload.length + 1,
+        modelId,
+        label,
+        tier,
+        sweScore,
+        ctx,
+        providerKey,
+        origin: source.name || providerKey,
+        status: pings.length === 0 ? 'pending' : recentOk > 0 ? 'up' : 'down',
+        httpCode: pings.length > 0 ? pings[pings.length - 1].code : null,
+        cliOnly: source.cliOnly || false,
+        zenOnly: source.zenOnly || false,
+        avg: avg === null ? null : Math.round(avg),
+        verdict,
+        uptime,
+        p95,
+        jitter: jitter === null ? null : Math.round(jitter),
+        stability: stability === null ? null : Math.round(stability * 100) / 100,
+        latestPing: pings.length > 0 ? pings[pings.length - 1].ms : null,
+        latestCode: pings.length > 0 ? pings[pings.length - 1].code : null,
+        pingHistory: pings.slice(-20),
+        pingCount: pings.length,
+        hasApiKey,
+        inRouterSet: inSetIndex.has(`${providerKey}::${modelId}`),
+      })
+    }
+  }
+  return payload
+}
+
+function getWebConfigPayload(runtime) {
+  const providers = {}
+  for (const [key, src] of Object.entries(sources)) {
+    const rawKey = runtime.getApiKeyForProvider(key)
+    providers[key] = {
+      name: src.name,
+      hasKey: !!rawKey,
+      maskedKey: rawKey ? maskApiKey(rawKey) : null,
+      enabled: isProviderEnabled(runtime.config, key),
+      modelCount: src.models?.length || 0,
+      cliOnly: src.cliOnly || false,
+    }
+  }
+  return { providers, totalModels: MODELS.length }
+}
+
+const WEB_DIST_DIR = resolvePath(__dirname, '..', 'web', 'dist')
+
+function serveStaticFromDist(res, absPath) {
+  const ext = absPath.slice(absPath.lastIndexOf('.'))
+  const ct = MIME_TYPES[ext] || 'application/octet-stream'
+  res.writeHead(200, {
+    'Content-Type': ct,
+    'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=31536000, immutable',
+    'X-Content-Type-Options': 'nosniff',
+  })
+  res.end(readFileSync(absPath))
+}
+
+function serveSpaIndex(res) {
+  const indexPath = resolvePath(WEB_DIST_DIR, 'index.html')
+  if (!existsSync(indexPath)) {
+    res.writeHead(503, { 'Content-Type': 'text/plain' })
+    res.end('Web dashboard not built. Run: pnpm build')
+    return
+  }
+  res.writeHead(200, {
+    'Content-Type': 'text/html; charset=utf-8',
+    'Cache-Control': 'no-cache',
+    'X-Content-Type-Options': 'nosniff',
+  })
+  res.end(readFileSync(indexPath))
+}
+
+function serveWebStaticFile(res, pathname, requestId) {
+  // 📖 Resolve to an absolute path and verify it stays inside WEB_DIST_DIR.
+  // 📖 Without this, `pathname` like `/../../etc/passwd` escapes the dist root.
+  const requested = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '')
+  const candidate = resolvePath(WEB_DIST_DIR, requested)
+  if (candidate !== WEB_DIST_DIR && !candidate.startsWith(WEB_DIST_DIR + '/')) {
+    sendError(res, 403, 'Forbidden', 'invalid_request_error', 'path_traversal_blocked', requestId)
+    return
+  }
+
+  let stats
+  try {
+    stats = statSync(candidate)
+  } catch (err) {
+    if (err.code === 'ENOENT') {
+      // 📖 SPA fallback: unknown route → serve index.html so client-side routing wins.
+      serveSpaIndex(res)
+      return
+    }
+    sendError(res, 500, 'Failed to read static file', 'server_error', 'static_file_read_failed', requestId)
+    return
+  }
+
+  if (stats.isDirectory()) {
+    const dirIndex = resolvePath(candidate, 'index.html')
+    if (dirIndex.startsWith(WEB_DIST_DIR + '/') && existsSync(dirIndex)) {
+      serveStaticFromDist(res, dirIndex)
+      return
+    }
+    // 📖 Directory without index.html → fall back to SPA root.
+    serveSpaIndex(res)
+    return
+  }
+
+  serveStaticFromDist(res, candidate)
 }
 
 function buildUpstreamMeta(response, text = '') {
@@ -865,6 +1061,24 @@ class RouterRuntime {
       uptime: candidate.stats.uptime,
       last_error: candidate.circuit?.lastError || null,
     }))
+  }
+
+  findBestModelForProviderInSources(providerKey) {
+    const source = sources[providerKey]
+    if (!source || !Array.isArray(source.models)) return null
+    let best = null
+    let bestTier = Infinity
+    for (const modelEntry of source.models) {
+      const [modelId, , tier] = modelEntry
+      if (!modelId || !tier) continue
+      const tierIdx = TIER_ORDER.indexOf(tier)
+      if (tierIdx < 0) continue
+      if (tierIdx < bestTier) {
+        bestTier = tierIdx
+        best = modelId
+      }
+    }
+    return best
   }
 
   addRequestLog(entry) {
@@ -1640,6 +1854,115 @@ class RouterRuntime {
         await this.handleSetsRequest(req, res, url, requestId)
         return
       }
+
+      // ─── Web Dashboard API endpoints ───────────────────────────────────────
+      if (req.method === 'GET' && url.pathname === '/api/models') {
+        sendJson(res, 200, getWebModelsPayload(this), { 'x-request-id': requestId })
+        return
+      }
+      if (req.method === 'GET' && url.pathname === '/api/config') {
+        sendJson(res, 200, getWebConfigPayload(this), { 'x-request-id': requestId })
+        return
+      }
+      if (req.method === 'GET' && url.pathname === '/api/events') {
+        if (this.sseClients.size >= MAX_SSE_CLIENTS) {
+          sendError(res, 503, 'Too many dashboard clients', 'service_unavailable', 'too_many_sse_clients', requestId)
+          return
+        }
+        res.writeHead(200, {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+          'x-request-id': requestId,
+        })
+        res.write(`data: ${JSON.stringify(getWebModelsPayload(this))}\n\n`)
+        this.sseClients.add(res)
+        req.on('close', () => this.sseClients.delete(res))
+        return
+      }
+      if (req.method === 'GET' && url.pathname.startsWith('/api/key/')) {
+        // 📖 Reveals raw API keys — same-origin only to prevent malicious sites
+        // 📖 from exfiltrating provider credentials via XHR/fetch.
+        if (!isSameOriginOrLocal(req)) {
+          sendError(res, 403, 'Forbidden cross-origin request', 'invalid_request_error', 'forbidden_origin', requestId)
+          return
+        }
+        const providerKey = decodeURIComponent(url.pathname.slice('/api/key/'.length))
+        if (!providerKey || !sources[providerKey]) {
+          sendError(res, 404, 'Unknown provider', 'invalid_request_error', 'unknown_provider', requestId)
+          return
+        }
+        const rawKey = this.getApiKeyForProvider(providerKey)
+        sendJson(res, 200, { key: rawKey || null }, { 'x-request-id': requestId })
+        return
+      }
+      if (req.method === 'POST' && url.pathname === '/api/settings') {
+        // 📖 Writes API keys + provider toggles — same-origin only to block
+        // 📖 CSRF-style writes from malicious browser tabs.
+        if (!isSameOriginOrLocal(req)) {
+          sendError(res, 403, 'Forbidden cross-origin request', 'invalid_request_error', 'forbidden_origin', requestId)
+          return
+        }
+        const body = await readJsonBody(req)
+        if (body.apiKeys) {
+          for (const [key, value] of Object.entries(body.apiKeys)) {
+            if (value) {
+              if (!this.config.apiKeys) this.config.apiKeys = {}
+              this.config.apiKeys[key] = value
+            } else {
+              if (this.config.apiKeys) delete this.config.apiKeys[key]
+            }
+          }
+        }
+        if (body.providers) {
+          for (const [key, value] of Object.entries(body.providers)) {
+            if (!this.config.providers) this.config.providers = {}
+            if (!this.config.providers[key]) this.config.providers[key] = {}
+            this.config.providers[key].enabled = value.enabled !== false
+          }
+        }
+        try {
+          saveConfig(this.config)
+        } catch (err) {
+          sendError(res, 500, 'Failed to save config: ' + err.message, 'server_error', 'config_save_failed', requestId)
+          return
+        }
+        if (body.apiKeys) {
+          for (const pk of Object.keys(body.apiKeys)) {
+            if (typeof pk !== 'string' || !pk) continue
+            const newModel = this.findBestModelForProviderInSources(pk)
+            if (!newModel) continue
+            const router = this.routerConfig()
+            if (!router.activeSet) continue
+            const activeSetData = router.sets?.[router.activeSet]
+            if (!activeSetData || activeSetData.models?.some((m) => m.provider === pk)) continue
+            const nextModels = [
+              ...(activeSetData.models || []),
+              { provider: pk, model: newModel, priority: (activeSetData.models?.length || 0) + 1 },
+            ]
+            this.setRouterConfig({
+              ...router,
+              sets: { ...router.sets, [router.activeSet]: { ...activeSetData, models: nextModels } },
+            })
+          }
+          void this.runProbeBurst()
+        }
+        sendJson(res, 200, { success: true }, { 'x-request-id': requestId })
+        return
+      }
+
+      // ─── Static file serving for web dashboard ────────────────────────────────
+      if (req.method === 'GET' && (
+        url.pathname === '/' || url.pathname === '/index.html' ||
+        url.pathname === '/styles.css' || url.pathname === '/app.js' ||
+        url.pathname.startsWith('/assets/') ||
+        url.pathname.endsWith('.js') || url.pathname.endsWith('.css') ||
+        url.pathname.endsWith('.svg') || url.pathname.endsWith('.png') ||
+        url.pathname.endsWith('.ico')
+      )) {
+        serveWebStaticFile(res, url.pathname, requestId)
+        return
+      }
       if (url.pathname === '/v1/chat/completions' || url.pathname.match(/^\/v1\/sets\/[^/]+\/chat\/completions$/)) {
         if (req.method !== 'POST') {
           sendError(res, 405, 'Method not allowed', 'invalid_request_error', 'method_not_allowed', requestId, { allowed: ['POST'] })
@@ -1811,9 +2134,21 @@ export function createRouterRuntimeForTest({ config, port = 0, logger = null, to
 }
 
 function ensureRouterConfigForDaemon(config, skipSave = false) {
-  // 📖 Always rebuild from favorites or defaults — no more manual set management
-  const favSet = buildRouterSetFromFavorites(config)
-  const activeSet = favSet || buildDefaultRouterSet(config)
+  // 📖 Preserve existing named sets (e.g., created by sync-set) to avoid overwriting
+  // 📖 user-created configurations. Only rebuild from favorites/defaults when no
+  // 📖 sets exist at all (fresh install).
+  const existingSets = config.router?.sets || {}
+  const existingActiveSet = config.router?.activeSet || DEFAULT_ROUTER_SETTINGS.activeSet
+  const existingSetData = existingSets[existingActiveSet]
+  const hasExistingNamedSet = existingSetData && Array.isArray(existingSetData.models) && existingSetData.models.length > 0
+
+  let activeSet
+  if (hasExistingNamedSet) {
+    activeSet = { name: existingActiveSet, models: existingSetData.models, created: existingSetData.created }
+  } else {
+    const favSet = buildRouterSetFromFavorites(config)
+    activeSet = favSet || buildDefaultRouterSet(config)
+  }
   config.router = normalizeRouterConfig({
     ...DEFAULT_ROUTER_SETTINGS,
     enabled: true,
@@ -1858,23 +2193,23 @@ function buildRouterSetFromFavorites(config) {
   }
 }
 
-function listenOnPort(server, port) {
+function listenOnPort(server, port, host = '127.0.0.1') {
   return new Promise((resolve, reject) => {
     const onError = (error) => {
-      server.off('listening', onListening)
+      server.off('error', onError)
       reject(error)
     }
     const onListening = () => {
-      server.off('error', onError)
+      server.off('listening', onListening)
       resolve(port)
     }
     server.once('error', onError)
     server.once('listening', onListening)
-    server.listen(port, '127.0.0.1')
+    server.listen(port, host)
   })
 }
 
-async function listenWithFallback(server, preferredPort, logger) {
+async function listenWithFallback(server, preferredPort, logger, host = '127.0.0.1') {
   const { defaultPort, maxPort } = getRouterPortRange()
   const start = Math.max(1, preferredPort || defaultPort)
   const candidates = []
@@ -1885,7 +2220,7 @@ async function listenWithFallback(server, preferredPort, logger) {
   let lastError = null
   for (const port of candidates) {
     try {
-      await listenOnPort(server, port)
+      await listenOnPort(server, port, host)
       return port
     } catch (error) {
       lastError = error
@@ -1903,13 +2238,14 @@ export async function runRouterDaemon() {
   runtime.installProcessSafety()
   const server = createServer((req, res) => void runtime.handleHttp(req, res))
   runtime.server = server
-  const port = await listenWithFallback(server, router.port, logger)
+  const host = process.env.FCM_HOST || '127.0.0.1'
+  const port = await listenWithFallback(server, router.port, logger, host)
   runtime.port = port
   runtime.config.router.port = port
   saveConfig(runtime.config)
   try { writeFileSync(ROUTER_PID_PATH, String(process.pid), { mode: 0o600 }) } catch (error) { logger.warn('PID file write failed', { error: error.message }) }
   try { writeFileSync(ROUTER_PORT_PATH, String(port), { mode: 0o600 }) } catch (error) { logger.warn('Port file write failed', { error: error.message }) }
-  logger.info('Router daemon started', { pid: process.pid, port, activeSet: runtime.routerConfig().activeSet })
+  logger.info('Router daemon started', { pid: process.pid, port, host, activeSet: runtime.routerConfig().activeSet })
   void sendUsageTelemetry(runtime.config, {}, {
     event: 'app_daemon_start',
     mode: 'daemon',

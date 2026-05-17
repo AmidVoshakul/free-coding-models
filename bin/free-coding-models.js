@@ -92,15 +92,7 @@ async function main() {
     process.exit(1);
   }
 
-  // 📖 --web mode: launch the web dashboard instead of the TUI
-  if (cliArgs.webMode) {
-    const { startWebServer } = await import('../web/server.js')
-    const port = parseInt(process.env.FCM_PORT || '3333', 10)
-    await startWebServer(port, { open: true })
-    return
-  }
-
-  // 📖 Load JSON config
+  // Load JSON config
   const config = loadConfig();
   ensureTelemetryConfig(config);
   ensureFavoritesConfig(config);
