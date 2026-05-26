@@ -1,73 +1,73 @@
 /**
  * @file changelog-loader.js
- * @description Load and parse CHANGELOG.md for display in the TUI
+ * @description Load and parse per-version changelog files from the changelog/ directory
+ *
+ * Each version has its own file: changelog/vX.Y.Z.md
+ * The file starts with `# Changelog vX.Y.Z - YYYY-MM-DD` followed by
+ * `### Added`, `### Fixed`, `### Changed` sections with bullet points.
  *
  * @functions
- *   → loadChangelog() — Read and parse CHANGELOG.md into structured format
+ *   → loadChangelog() — Read and parse all changelog files into structured format
  *   → getLatestChanges(version) — Return changelog for a specific version
  *   → formatChangelogForDisplay(version) — Format for TUI rendering
  *
  * @exports loadChangelog, getLatestChanges, formatChangelogForDisplay
  */
 
-import { readFileSync, existsSync } from 'fs'
+import { readFileSync, existsSync, readdirSync } from 'fs'
 import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
-const CHANGELOG_PATH = join(__dirname, '..', 'CHANGELOG.md')
+const CHANGELOG_DIR = join(__dirname, '..', 'changelog')
 
 /**
- * 📖 loadChangelog: Read and parse CHANGELOG.md
+ * 📖 loadChangelog: Read and parse all per-version changelog files
  * @returns {Object} { versions: { '0.2.11': { added: [], fixed: [], changed: [] }, ... } }
  */
 export function loadChangelog() {
-  if (!existsSync(CHANGELOG_PATH)) return { versions: {} }
+  if (!existsSync(CHANGELOG_DIR)) return { versions: {} }
 
-  const content = readFileSync(CHANGELOG_PATH, 'utf8')
   const versions = {}
-  const lines = content.split('\n')
-  let currentVersion = null
-  let currentSection = null
-  let currentItems = []
+  const files = readdirSync(CHANGELOG_DIR).filter(f => f.endsWith('.md'))
 
-  for (const line of lines) {
-    // 📖 Match version headers: ## 0.2.11
-    const versionMatch = line.match(/^## ([\d.]+)/)
-    if (versionMatch) {
-      if (currentVersion && currentSection && currentItems.length > 0) {
-        if (!versions[currentVersion]) versions[currentVersion] = {}
-        versions[currentVersion][currentSection] = currentItems
+  for (const file of files) {
+    const filePath = join(CHANGELOG_DIR, file)
+    const content = readFileSync(filePath, 'utf8')
+    const lines = content.split('\n')
+    let currentSection = null
+    let currentItems = []
+
+    // 📖 Extract version from filename (e.g. v0.3.67.md → 0.3.67)
+    const verMatch = file.match(/^v([\d.]+)\.md$/)
+    if (!verMatch) continue
+    const currentVersion = verMatch[1]
+
+    for (const line of lines) {
+      // 📖 Match section headers: ### Added, ### Fixed, ### Changed
+      const sectionMatch = line.match(/^### (Added|Fixed|Changed|Updated)/)
+      if (sectionMatch) {
+        if (currentSection && currentItems.length > 0) {
+          if (!versions[currentVersion]) versions[currentVersion] = {}
+          versions[currentVersion][currentSection] = currentItems
+        }
+        currentSection = sectionMatch[1].toLowerCase()
+        currentItems = []
+        continue
       }
-      currentVersion = versionMatch[1]
-      currentSection = null
-      currentItems = []
-      continue
-    }
 
-    // 📖 Match section headers: ### Added, ### Fixed, ### Changed
-    const sectionMatch = line.match(/^### (Added|Fixed|Changed|Updated)/)
-    if (sectionMatch) {
-      if (currentVersion && currentSection && currentItems.length > 0) {
-        if (!versions[currentVersion]) versions[currentVersion] = {}
-        versions[currentVersion][currentSection.toLowerCase()] = currentItems
+      // 📖 Match bullet points: - **text**: description
+      if (line.match(/^- /) && currentSection) {
+        currentItems.push(line.replace(/^- /, ''))
       }
-      currentSection = sectionMatch[1].toLowerCase()
-      currentItems = []
-      continue
     }
 
-    // 📖 Match bullet points: - **text**: description
-    if (line.match(/^- /) && currentVersion && currentSection) {
-      currentItems.push(line.replace(/^- /, ''))
+    // 📖 Save the last section
+    if (currentSection && currentItems.length > 0) {
+      if (!versions[currentVersion]) versions[currentVersion] = {}
+      versions[currentVersion][currentSection] = currentItems
     }
-  }
-
-  // 📖 Save the last section
-  if (currentVersion && currentSection && currentItems.length > 0) {
-    if (!versions[currentVersion]) versions[currentVersion] = {}
-    versions[currentVersion][currentSection] = currentItems
   }
 
   return { versions }

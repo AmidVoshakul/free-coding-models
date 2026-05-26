@@ -33,7 +33,7 @@ Tests live in `test/test.js`. Pure logic lives in `src/utils.js` so it can be te
 
 ## Releasing
 
-1. Update `CHANGELOG.md`
+1. Update `changelog/vX.Y.Z.md` with the release notes for the new version
 2. Bump `"version"` in `package.json`
 3. Commit with just the version number as the message:
 

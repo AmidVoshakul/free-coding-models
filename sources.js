@@ -50,8 +50,6 @@ export const nvidiaNim = [
   ['stepfun-ai/step-3.5-flash',                    'Step 3.5 Flash',      'S+', '74.4%', '256k'],
   ['qwen/qwen3-coder-480b-a35b-instruct',          'Qwen3 Coder 480B',    'S+', '70.6%', '256k'],
   // ── S tier — SWE-bench Verified 60–70% ──
-  ['minimaxai/minimax-m2',                         'MiniMax M2',          'S',  '69.4%', '128k'],
-  ['qwen/qwen3-next-80b-a3b-thinking',             'Qwen3 80B Thinking',  'S',  '68.0%', '128k'],
   ['qwen/qwen3-next-80b-a3b-instruct',             'Qwen3 80B Instruct',  'S',  '65.0%', '128k'],
   ['qwen/qwen3.5-397b-a17b',                       'Qwen3.5 400B VLM',    'S',  '68.0%', '128k'],
   ['openai/gpt-oss-120b',                          'GPT OSS 120B',        'S',  '60.0%', '128k'],
@@ -60,27 +58,27 @@ export const nvidiaNim = [
   ['mistralai/mistral-small-4-119b-2603',           'Mistral Small 4',     'S',  '60.0%', '128k'],
   ['qwen/qwen3.5-122b-a10b',                       'Qwen3.5 122B',        'S',  '64.0%', '128k'],
   // ── A+ tier — SWE-bench Verified 50–60% ──
-  ['nvidia/llama-3.1-nemotron-ultra-253b-v1',      'Nemotron Ultra 253B', 'A+', '56.0%', '128k'],
   ['mistralai/mistral-large-3-675b-instruct-2512', 'Mistral Large 675B',  'A+', '58.0%', '256k'],
   ['nvidia/nemotron-3-super-120b-a12b',             'Nemotron 3 Super',    'A+', '56.0%', '128k'],
   ['nvidia/nemotron-3-nano-omni-30b-a3b-reasoning','Nemotron 3 Omni',     'A+', '52.0%', '128k'],
   // ── A tier — SWE-bench Verified 40–50% ──
-  ['nvidia/llama-3.3-nemotron-super-49b-v1.5',     'Nemotron Super 49B',  'A',  '49.0%', '128k'],
   ['nvidia/nemotron-3-nano-30b-a3b',               'Nemotron Nano 30B',   'A',  '43.0%', '128k'],
   ['openai/gpt-oss-20b',                           'GPT OSS 20B',         'A',  '42.0%', '128k'],
   ['google/gemma-4-31b-it',                         'Gemma 4 31B',         'A',  '45.0%', '256k'],
   // ── A- tier — SWE-bench Verified 35–40% ──
-  ['meta/llama-3.3-70b-instruct',                  'Llama 3.3 70B',       'A-', '39.5%', '128k'],
   ['bytedance/seed-oss-36b-instruct',              'Seed OSS 36B',        'A-', '38.0%', '32k'],
   ['stockmark/stockmark-2-100b-instruct',          'Stockmark 100B',      'A-', '36.0%', '32k'],
   // ── B+ tier — SWE-bench Verified 30–35% ──
-  ['mistralai/mixtral-8x22b-instruct-v0.1',        'Mixtral 8x22B',       'B+', '32.0%', '64k'],
   ['mistralai/ministral-14b-instruct-2512',        'Ministral 14B',       'B+', '34.0%', '32k'],
-  ['ibm/granite-34b-code-instruct',                'Granite 34B Code',    'B+', '30.0%', '32k'],
   // ── B tier — SWE-bench Verified 20–30% ──
-  ['meta/llama-3.1-8b-instruct',                   'Llama 3.1 8B',        'B',  '28.8%', '128k'],
+  ['meta/llama-3.2-11b-vision-instruct',           'Llama 3.2 11B Vision','B',  '28.0%', '128k'],
   // ── C tier — SWE-bench Verified <20% or lightweight edge models ──
   ['microsoft/phi-4-mini-instruct',                'Phi 4 Mini',          'C',  '14.0%', '128k'],
+  // Removed (2026-05-26): minimax-m2 (deprecated), qwen3-next-80b-a3b-thinking (deprecated),
+  // llama-3.1-nemotron-ultra-253b-v1 (404), llama-3.3-nemotron-super-49b-v1.5 (404),
+  // llama-3.3-70b-instruct (404), mixtral-8x22b-instruct-v0.1 (404),
+  // granite-34b-code-instruct (deprecated), llama-4-scout-17b-16e-instruct (deprecated, not in nvidiaNim),
+  // llama-3.1-8b-instruct (404) → replaced by llama-3.2-11b-vision-instruct
 ]
 
 // 📖 Groq source - https://console.groq.com

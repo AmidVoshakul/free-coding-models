@@ -22,7 +22,7 @@ When releasing a new version, follow this exact process:
 2. **Version Bump**: Update version in `package.json` (e.g., `0.1.16` → `0.1.17`)
 3. **Commit ALL Changed Files**: `git add . && git commit -m "0.1.17"`
    - Always commit with just the version number as the message (e.g., "0.1.17")
-   - Include ALL modified files in the commit (bin/, src/, test/, README.md, CHANGELOG.md, etc.)
+   - Include ALL modified files in the commit (bin/, src/, test/, README.md, changelog/, etc.)
 4. **Push**: `git push origin main` — GitHub Actions will auto-publish to npm
 5. **Wait for npm Publish":
    ```bash
@@ -218,17 +218,38 @@ Use tmux when:
 
 ## Changelog (MANDATORY)
 
-**⚠️ CRITICAL:** Every new version MUST REPLACE the entire `CHANGELOG.md` file with ONLY the content from THAT specific version. Do not append to a long history.
+**Per-version changelog files.** Every version has its own changelog file in the `changelog/` directory, named `changelog/vX.Y.Z.md` where `X.Y.Z` is the version number.
 
-- Check all commits, code changes, and work done since the last version bumped to ensure the changelog is **complete**.
-- Add necessary details, intentions, and explanations to the changelog entries. Provide clear, user-facing explanations of *why* changes were made and *how* they work.
-- Use the current version from `package.json` as the single header (e.g. `## [0.1.64] - YYYY-MM-DD`).
-- The `CHANGELOG.md` file should ONLY contain this single version's release notes.
-- List changes under `### Added`, `### Fixed`, or `### Changed` as appropriate.
-- Keep the structure clean so it can be reused directly in the GitHub Release notes screen.
-- Update `CHANGELOG.md` BEFORE committing and pushing.
+### Rules
 
-**Why this is critical:** The changelog is used directly for GitHub release notes. It should only contain the comprehensive notes for the current release to avoid publishing the entire history over and over.
+- **Format:** Each file must start with `# Changelog vX.Y.Z - YYYY-MM-DD` followed by the release notes.
+- **Location:** All changelog files live in `changelog/` — there is **no** root-level `CHANGELOG.md`.
+- **Structure:** List changes under `### Added`, `### Fixed`, or `### Changed` as appropriate.
+- **Content:** Check all commits, code changes, and work done since the last version to ensure the changelog is **complete**. Add clear, user-facing explanations of *why* changes were made and *how* they work.
+- **Order:** Keep the structure clean so it can be reused directly in the GitHub Release notes screen.
+- **Timing:** Create/update the changelog file BEFORE committing and pushing.
+
+### Creating a new changelog file
+
+```bash
+# For version 0.3.68 released on 2026-05-20
+cat > changelog/v0.3.68.md << 'EOF'
+# Changelog v0.3.68 - 2026-05-20
+
+### Added
+- ...
+
+### Changed
+- ...
+
+### Fixed
+- ...
+EOF
+```
+
+### Historical changelogs
+
+All past versions (v0.1.1 through the latest) already have their changelog files in `changelog/`. They were extracted from GitHub Release notes and git commit messages. If a version's notes are missing or sparse, it means no detailed release notes were published for that version.
 
 ## Version Bump Workflow (/bump command)
 
@@ -241,9 +262,13 @@ When user requests `/bump`, `"push commit"`, or `"bump a new version now"`, exec
 
 ### 2. Update Changelog
 - Review all work done since the last published version
-- REWRITE the entire `CHANGELOG.md` file to contain ONLY the release notes for the new version
+- Create a new file `changelog/vX.Y.Z.md` with the release notes for the new version
 - Include comprehensive details, intentions, and explanations for all changes
 - Ensure changelog is user-facing with clear bullet points
+- Use the format: `# Changelog vX.Y.Z - YYYY-MM-DD` followed by `### Added`, `### Changed`, `### Fixed` sections
+
+**⚠️ CRITICAL — Changelog = GitHub Release body:**
+The content of `changelog/vX.Y.Z.md` (minus the `# Changelog vX.Y.Z - YYYY-MM-DD` header line) MUST be used as the GitHub Release body when the release is created. This is the single source of truth — the changelog file IS the release notes. Never publish a GitHub Release with empty or auto-generated notes when a changelog file exists. The CI workflow automates this (it reads `changelog/vX.Y.Z.md` and uses it as `--notes-file`), but if you create a release manually, you must copy the changelog content into the release body verbatim.
 
 ### 3. Update Documentation
 - Review and update `README.md` if needed for new features/changes
