@@ -112,7 +112,7 @@ jobs:
             console.log('⚠️ No changelog section found for version', ver)
             require('fs').appendFileSync(process.env.GITHUB_OUTPUT, 'has_notes=false\n')
           }
-          EOF>
+          EOF
 
       # 📖 Create the GitHub Release with the extracted notes (or auto-generated if none found)
       - name: Create GitHub Release
