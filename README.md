@@ -16,7 +16,7 @@
   <img src="https://img.shields.io/npm/v/free-coding-models?color=3d6b00&label=npm&logo=npm" alt="npm version" width="200"><br>
   <img src="https://img.shields.io/node/v/free-coding-models?color=3d6b00&logo=node.js" alt="node version" width="200"><br>
   <img src="https://img.shields.io/npm/l/free-coding-models?color=3d6b00" alt="license" width="200"><br>
-  <img src="https://img.shields.io/badge/models-170+-3d6b00?logo=nvidia" alt="models count" width="200"><br>
+  <img src="https://img.shields.io/badge/models-157+-3d6b00?logo=nvidia" alt="models count" width="200"><br>
   <img src="https://img.shields.io/badge/providers-16-1a56db" alt="providers count" width="200">
 </p>
 
@@ -59,7 +59,7 @@ free-coding-models
 
 ## 💡 Why this tool?
 
-There are **~170 cataloged free or free-limited coding models** across ~15 vetted providers. Which one is fastest right now? Which one is actually stable versus just lucky on the last ping?
+There are **~157 cataloged free or free-limited coding models** across 16 vetted providers. Which one is fastest right now? Which one is actually stable versus just lucky on the last ping?
 
 This CLI pings them all in parallel, shows live latency, and calculates a **live Stability Score (0-100)**. Average latency alone is misleading if a model randomly spikes to 6 seconds; the stability score measures true reliability by combining **p95 latency** (30%), **jitter/variance** (30%), **spike rate** (20%), and **uptime** (20%). 
 
@@ -73,26 +73,26 @@ It then writes the model you pick directly into your coding tool's config — so
 
 Create a free account on one provider below to get started:
 
-**~170 coding models** across ~15 active providers, ranked by practical free-tier usefulness.
+**~157 coding models** across 16 active providers, ranked by practical free-tier usefulness.
 
 | # | Provider | Models | Tier range | Free tier | Env var |
 |---|----------|--------|-----------|-----------|--------|
-| 1 | [NVIDIA NIM](https://build.nvidia.com) | 42 | S+ → C | ~40 RPM (no credit card) | `NVIDIA_API_KEY` |
+| 1 | [NVIDIA NIM](https://build.nvidia.com) | 26 | S+ → C | ~40 RPM (no credit card) | `NVIDIA_API_KEY` |
 | 2 | [Groq](https://console.groq.com/keys) | 8 | S → B | 30 RPM, 1K‑14.4K req/day (no credit card) | `GROQ_API_KEY` |
-| 3 | [Cerebras](https://cloud.cerebras.ai) | 4 | S+ → B | 30 RPM, 1M tokens/day (no credit card) | `CEREBRAS_API_KEY` |
-| 4 | [Google AI Studio](https://aistudio.google.com/apikey) | 6 | S+ → A | Gemini free quotas vary by model/region | `GOOGLE_API_KEY` |
+| 3 | [Cerebras](https://cloud.cerebras.ai) | 2 | S+ → S | 30 RPM, 1M tokens/day (no credit card) | `CEREBRAS_API_KEY` |
+| 4 | [Google AI Studio](https://aistudio.google.com/apikey) | 7 | S+ → A | Gemini free quotas vary by model/region | `GOOGLE_API_KEY` |
 | 5 | [GitHub Models](https://models.github.ai) | 15 | S+ → C | Quota depends on GitHub/Copilot tier | `GITHUB_TOKEN` |
-| 6 | [Mistral La Plateforme](https://console.mistral.ai/api-keys) | 7 | S+ → A | Experiment plan, free evaluation tier | `MISTRAL_API_KEY` |
-| 7 | [Cloudflare Workers AI](https://dash.cloudflare.com) | 15 | S+ → B | 10K neurons/day, 300 RPM (no credit card) | `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` |
-| 8 | [OpenRouter](https://openrouter.ai/keys) | 31 | S+ → C | 50 req/day free, 1K/day with $10 spend | `OPENROUTER_API_KEY` |
-| 9 | [SambaNova](https://cloud.sambanova.ai/apis) | 6 | S+ → A- | Small developer quota, useful for light usage | `SAMBANOVA_API_KEY` |
+| 6 | [Mistral La Plateforme](https://console.mistral.ai/api-keys) | 5 | S+ → A | Experiment plan, free evaluation tier | `MISTRAL_API_KEY` |
+| 7 | [Cloudflare Workers AI](https://dash.cloudflare.com) | 14 | S+ → B | 10K neurons/day, 300 RPM (no credit card) | `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` |
+| 8 | [OpenRouter](https://openrouter.ai/keys) | 26 | S+ → C | 50 req/day free, 1K/day with $10 spend | `OPENROUTER_API_KEY` |
+| 9 | [SambaNova](https://cloud.sambanova.ai/apis) | 7 | S+ → B+ | Small developer quota, useful for light usage | `SAMBANOVA_API_KEY` |
 | 10 | [OVHcloud AI Endpoints](https://endpoints.ai.cloud.ovh.net) | 10 | S → B | 2 req/min/IP free, 400 RPM with key | `OVH_AI_ENDPOINTS_ACCESS_TOKEN` |
 | 11 | [Codestral](https://console.mistral.ai/api-keys) | 1 | B+ | 30 RPM, 2K req/day | `MISTRAL_API_KEY` |
 | 12 | [ZAI](https://z.ai) | 2 | S | Free Flash models only | `ZAI_API_KEY` |
 | 13 | [Scaleway](https://console.scaleway.com/iam/api-keys) | 10 | S+ → B | 1M free tokens | `SCALEWAY_API_KEY` |
-| 14 | [Alibaba DashScope](https://modelstudio.console.alibabacloud.com) | 9 | S+ → A | 1M free tokens/model, Singapore, 90 days | `DASHSCOPE_API_KEY` |
-| 15 | [Gemini CLI](https://github.com/google-gemini/gemini-cli) | 6 | S+ → A | 1,000 req/day with personal Google account | CLI tool ♊ |
-| 16 | [OpenCode Zen](https://opencode.ai/zen) | 8 | S+ → A | Free with OpenCode account | Zen models ✨ |
+| 14 | [Alibaba DashScope](https://modelstudio.console.alibabacloud.com) | 11 | S+ → A+ | 1M free tokens/model, Singapore, 90 days | `DASHSCOPE_API_KEY` |
+| 15 | [Gemini CLI](https://github.com/google-gemini/gemini-cli) | 7 | S+ → A | 1,000 req/day with personal Google account | CLI tool ♊ |
+| 16 | [OpenCode Zen](https://opencode.ai/zen) | 6 | S+ → A | Free with OpenCode account | Zen models ✨ |
 
 > 💡 One key is enough. Add more at any time with **`P`** inside the TUI.
 
