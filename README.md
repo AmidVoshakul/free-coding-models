@@ -131,6 +131,12 @@ Use ⚡️ Command Palette! with **Ctrl+P**.
 
 Run FCM without installing Node.js using the official Docker image:
 
+> **Note:** GHCR requires authentication even for public images. Login once with:
+> ```bash
+> echo $GITHUB_TOKEN | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
+> ```
+> Or use a [personal access token](https://github.com/settings/tokens) with `read:packages` scope.
+
 ```bash
 # Quick start (daemon + web UI on port 19280)
 docker run -p 19280:19280 ghcr.io/vava-nessa/free-coding-models:latest
