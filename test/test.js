@@ -96,6 +96,12 @@ import {
 } from '../src/command-palette.js'
 import { startWebServer, inspectExistingWebServer } from '../web/server.js'
 import { buildTelemetryProperties, sendUsageTelemetry } from '../src/telemetry.js'
+import {
+  formatBenchmarkResult,
+  estimateTokensFromText,
+  buildBenchmarkRequest,
+  benchmarkModel,
+} from '../src/benchmark.js'
 
 // ─── Helper: create a mock model result ──────────────────────────────────────
 // 📖 Builds a minimal result object matching the shape used by the main script
@@ -1239,22 +1245,22 @@ describe('renderTable responsive column visibility', () => {
   })
 
   it('uses compact labels in compact mode (slightly narrow)', () => {
-    // 📖 At 146 cols, compact mode activates but no columns hidden yet
-    const output = renderAtWidth(146)
+    // 📖 At 164 cols, compact mode is active but no columns hidden yet
+    const output = renderAtWidth(164)
     assert.match(output, /Lat\. P/)
     assert.match(output, /Avg\. P/)
     assert.doesNotMatch(output, /Latest Ping/)
     assert.doesNotMatch(output, /Avg Ping/)
     // 📖 Provider header should be compact 'PrOD…'
     assert.match(output, /PrOD…/)
-    // 📖 All optional columns still visible
+    // 📖 All optional columns still visible (Rank + Answer Speed)
     assert.match(output, /Rank/)
     assert.match(output, /Up%/)
   })
 
   it('hides Rank column first when too narrow for compact', () => {
-    // 📖 At 137 cols, Rank is hidden (compact = 146, minus Rank col+sep = 137)
-    const output = renderAtWidth(137)
+    // 📖 At 145 cols, Rank is hidden (compact = 153, minus Rank col+sep = 144)
+    const output = renderAtWidth(145)
     assert.doesNotMatch(output, /Rank/)
     // 📖 Other always-visible columns should still be present
     assert.match(output, /Model/)
@@ -1262,8 +1268,8 @@ describe('renderTable responsive column visibility', () => {
   })
 
   it('hides Rank and Up% at narrower widths', () => {
-    // 📖 At 128 cols, Rank and Uptime hidden (137 minus Up% col+sep = 128)
-    const output = renderAtWidth(128)
+    // 📖 At 120 cols, Rank, Answer Speed, and Uptime hidden (127 minus Up% col+sep = 118)
+    const output = renderAtWidth(120)
     assert.doesNotMatch(output, /Rank/)
     // 📖 Up% header is just 'Up%' — check it is NOT in the output
     assert.doesNotMatch(output, /Up%/)
@@ -1271,18 +1277,18 @@ describe('renderTable responsive column visibility', () => {
   })
 
   it('hides Rank, Up%, and Tier at even narrower widths', () => {
-    // 📖 At 120 cols, Rank, Uptime, and Tier hidden (128 minus Tier col+sep = 120)
-    const output = renderAtWidth(120)
+    // 📖 At 110 cols, Rank, Answer Speed, Uptime, and Tier hidden (118 minus Tier col+sep = 110)
+    const output = renderAtWidth(110)
     assert.doesNotMatch(output, /Rank/)
     const lines = output.split('\n')
     const headerLine = lines.find(l => l.includes('Model') && l.includes('Health'))
     assert.ok(headerLine, 'header line should exist')
-    assert.ok(!headerLine.includes('Tier'), 'Tier should be hidden at 120 cols')
+    assert.ok(!headerLine.includes('Tier'), 'Tier should be hidden at 110 cols')
   })
 
-  it('hides all 4 optional columns at very narrow widths', () => {
-    // 📖 At 109 cols, all 4 optional columns hidden (120 minus Stability col+sep = 109)
-    const output = renderAtWidth(109)
+  it('hides all optional columns at very narrow widths', () => {
+    // 📖 At 108 cols, all optional columns hidden (110 minus Stability col+sep = 99)
+    const output = renderAtWidth(108)
     assert.doesNotMatch(output, /Rank/)
     // 📖 Stability/StaB. should be gone
     assert.doesNotMatch(output, /Stability/)
@@ -4464,6 +4470,122 @@ describe('sync-set', () => {
     it('includes --sync-set in help text', () => {
       const help = buildCliHelpText()
       assert.ok(help.includes('--sync-set'), 'Help text should mention --sync-set')
+    })
+  })
+
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // 📖 BENCHMARK MODULE
+  // ═══════════════════════════════════════════════════════════════════════════════
+  describe('formatBenchmarkResult', () => {
+    it('formats 4300ms + 56 tokens as "4.3s / 13 TPS"', () => {
+      const result = { ok: true, totalMs: 4300, outputTokens: 56, tokensPerSecond: 13 }
+      assert.equal(formatBenchmarkResult(result), '4.3s / 13 TPS')
+    })
+
+    it('shows dash for empty state', () => {
+      assert.equal(formatBenchmarkResult(null), '—')
+    })
+
+    it('shows spinner when running', () => {
+      const out = formatBenchmarkResult(null, { running: true, frame: 0 })
+      assert.equal(out, '⠋')
+    })
+
+    it('shows compact error code on failure', () => {
+      assert.equal(formatBenchmarkResult({ ok: false, code: 'TIMEOUT' }), 'TIMEOUT')
+      assert.equal(formatBenchmarkResult({ ok: false, code: '401' }), '401')
+      assert.equal(formatBenchmarkResult({ ok: false, code: '429' }), '429')
+      assert.equal(formatBenchmarkResult({ ok: false, code: 'ERR' }), 'ERR')
+    })
+
+    it('uses whole seconds when >= 10s', () => {
+      const result = { ok: true, totalMs: 12300, outputTokens: 100, tokensPerSecond: 8 }
+      assert.equal(formatBenchmarkResult(result), '12s / 8 TPS')
+    })
+
+    it('rounds TPS to integer', () => {
+      const result = { ok: true, totalMs: 1000, outputTokens: 15, tokensPerSecond: 15.7 }
+      assert.equal(formatBenchmarkResult(result), '1.0s / 16 TPS')
+    })
+  })
+
+  describe('estimateTokensFromText', () => {
+    it('returns 0 for empty text', () => {
+      assert.equal(estimateTokensFromText(''), 0)
+      assert.equal(estimateTokensFromText(null), 0)
+    })
+
+    it('estimates tokens from character length divided by 4', () => {
+      // 40 chars → ceil(40/4) = 10 tokens
+      assert.equal(estimateTokensFromText('a'.repeat(40)), 10)
+    })
+
+    it('rounds up partial tokens', () => {
+      // 41 chars → ceil(41/4) = 11 tokens
+      assert.equal(estimateTokensFromText('a'.repeat(41)), 11)
+    })
+  })
+
+  describe('benchmarkModel', () => {
+    it('returns unsupported for CLI-only providers', async () => {
+      const result = await benchmarkModel({
+        apiKey: 'test',
+        modelId: 'test',
+        providerKey: 'rovo',
+        url: 'http://example.com',
+      })
+      assert.equal(result.ok, false)
+      assert.equal(result.code, 'UNSUPPORTED')
+    })
+
+    it('returns unsupported for gemini provider', async () => {
+      const result = await benchmarkModel({
+        apiKey: 'test',
+        modelId: 'test',
+        providerKey: 'gemini',
+        url: 'http://example.com',
+      })
+      assert.equal(result.ok, false)
+      assert.equal(result.code, 'UNSUPPORTED')
+    })
+  })
+
+  describe('buildBenchmarkRequest', () => {
+    it('builds OpenAI-compatible request for standard providers', () => {
+      const req = buildBenchmarkRequest('sk-test', 'gpt-4', 'nvidia', 'https://api.nvidia.com/v1/chat/completions')
+      assert.equal(req.url, 'https://api.nvidia.com/v1/chat/completions')
+      assert.equal(req.headers.Authorization, 'Bearer sk-test')
+      assert.equal(req.body.model, 'gpt-4')
+      assert.equal(req.body.temperature, 0)
+      assert.equal(req.body.max_tokens, 32)
+      assert.ok(Array.isArray(req.body.messages))
+    })
+
+    it('strips zai/ prefix for zai provider', () => {
+      const req = buildBenchmarkRequest('sk-test', 'zai/glm-5', 'zai', 'https://api.z.ai/v1/chat/completions')
+      assert.equal(req.body.model, 'glm-5')
+    })
+
+    it('builds replicate-specific payload', () => {
+      const req = buildBenchmarkRequest('token', 'version123', 'replicate', 'https://api.replicate.com/v1/predictions')
+      assert.equal(req.url, 'https://api.replicate.com/v1/predictions')
+      assert.equal(req.headers.Authorization, 'Token token')
+      assert.equal(req.body.version, 'version123')
+      assert.equal(req.body.input.max_tokens, 32)
+    })
+
+    it('builds cloudflare request with account id resolution', () => {
+      const req = buildBenchmarkRequest('token', 'model-x', 'cloudflare', 'https://api.cloudflare.com/{account_id}/v1/chat/completions')
+      // 📖 resolveCloudflareUrl replaces {account_id} with the env var or 'missing-account-id'
+      assert.ok(!req.url.includes('{account_id}'), 'placeholder should be resolved')
+      assert.ok(req.url.includes('/v1/chat/completions'))
+      assert.ok(req.headers.Authorization)
+    })
+
+    it('adds openrouter headers', () => {
+      const req = buildBenchmarkRequest('sk-or-test', 'model', 'openrouter', 'https://openrouter.ai/api/v1/chat/completions')
+      assert.equal(req.headers['HTTP-Referer'], 'https://github.com/vava-nessa/free-coding-models')
+      assert.equal(req.headers['X-Title'], 'free-coding-models')
     })
   })
 })

@@ -379,18 +379,14 @@ Press **`Z`** in the TUI to cycle between tools without restarting.
 
 ### OpenCode Zen Free Models
 
-[OpenCode Zen](https://opencode.ai/zen) is a hosted AI gateway offering 8 free coding models exclusively through OpenCode CLI and OpenCode Desktop. These models are **not** available through other tools.
+[OpenCode Zen](https://opencode.ai/zen) is a hosted AI gateway offering **4 free coding models** exclusively through OpenCode CLI and OpenCode Desktop. These models are **not** available through other tools.
 
 | Model | Tier | SWE-bench | Context |
 |-------|------|-----------|---------|
 | Big Pickle | S+ | 72.0% | 200k |
-| MiniMax M2.5 Free | S+ | 80.2% | 200k |
-| Nemotron 3 Super Free | A+ | 52.0% | 1M |
-| GPT 5 Nano | S | 65.0% | 400k |
-| HY3 Preview Free | A+ | - | 128k |
-| Ling 2.6 Flash Free | S | - | 128k |
-| Trinity Large Preview Free | S | - | 128k |
-| Trinity Mini Preview Free | A | - | 128k |
+| DeepSeek V4 Flash Free | S+ | 79.0% | 200k |
+| MiMo-V2.5 Free | S+ | - | 200k |
+| Nemotron 3 Super Free | A+ | 52.0% | 200k |
 
 To use Zen models: sign up at [opencode.ai/auth](https://opencode.ai/auth) and enter your Zen API key via `P` (Settings). Zen models appear in the main table and auto-switch to OpenCode CLI on launch.
 

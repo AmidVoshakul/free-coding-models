@@ -261,5 +261,12 @@ export function createTuiState({
 
     // 📖 Token usage overlay scroll state (used when overlay opens from footer)
     tokenUsageOpen: false,
+
+    // 📖 Benchmark results: keyed by `${providerKey}/${modelId}`
+    // 📖 Each entry is the raw result object from benchmarkModel() or null.
+    benchmarkResults: {},
+
+    // 📖 Set of benchmark keys currently running (for spinner display)
+    benchmarkRunning: new Set(),
   }
 }

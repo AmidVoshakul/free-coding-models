@@ -355,11 +355,12 @@ export const gemini = [
 // 📖 Config: set provider to opencode/<model-id> in OpenCode config
 export const opencodeZen = [
   ['big-pickle',                       'Big Pickle',              'S+', '72.0%', '200k'],
-  ['minimax-m2.5-free',                'MiniMax M2.5 Free',      'S+', '80.2%', '200k'],
   ['deepseek-v4-flash-free',           'DeepSeek V4 Flash Free',  'S+', '79.0%', '200k'],
-  ['qwen3.6-plus-free',                'Qwen3.6 Plus Free',       'S+', '78.8%', '1M'],
+  ['mimo-v2.5-free',                   'MiMo-V2.5 Free',          'S+', '-',     '200k'],
   ['nemotron-3-super-free',            'Nemotron 3 Super Free',   'A+', '52.0%', '200k'],
-  ['gpt-5-nano',                       'GPT 5 Nano',              'S',  '65.0%', '400k'],
+  // Removed (2026-05-28): qwen3.6-plus-free (free promotion ended — now requires OpenCode Go)
+  // Removed (2026-05-28): minimax-m2.5-free (7-day launch promo expired — now paid)
+  // Removed (2026-05-28): gpt-5-nano (was never free — incorrectly cataloged as free, requires Zen PAYG)
   // Removed (2026-05-26): hy3-preview-free (deleted from Zen)
   // Removed (2026-05-26): ling-2.6-flash-free (deleted from Zen)
   // Removed (2026-05-26): trinity-mini-free (deleted from Zen)

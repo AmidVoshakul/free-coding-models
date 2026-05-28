@@ -845,6 +845,8 @@ export async function runApp(cliArgs, config) {
       verdictFilterMode: state.verdictFilterMode,
       healthFilterMode: state.healthFilterMode,
       bestModeOnly: state.bestModeOnly,
+      benchmarkResults: state.benchmarkResults,
+      benchmarkRunning: state.benchmarkRunning,
     }
     if (state.commandPaletteOpen) {
       if (!state.commandPaletteFrozenTable) {
@@ -932,6 +934,8 @@ export async function runApp(cliArgs, config) {
     verdictFilterMode: state.verdictFilterMode,
     healthFilterMode: state.healthFilterMode,
     bestModeOnly: state.bestModeOnly,
+    benchmarkResults: state.benchmarkResults,
+    benchmarkRunning: state.benchmarkRunning,
   }))
   if (process.stdout.isTTY) {
     process.stdout.flush && process.stdout.flush()

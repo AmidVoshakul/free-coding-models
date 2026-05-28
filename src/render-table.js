@@ -49,6 +49,7 @@ import { themeColors, getProviderRgb, getTierRgb, getReadableTextRgb, getTheme }
 import { TIER_COLOR } from './tier-colors.js'
 import { getAvg, getVerdict, getUptime, getStabilityScore, getVersionStatusInfo } from './utils.js'
 import { usagePlaceholderForProvider } from './ping.js'
+import { formatBenchmarkResult } from './benchmark.js'
 import { calculateViewport, sortResultsWithPinnedFavorites, padEndDisplay, displayWidth } from './render-helpers.js'
 import { getToolMeta, TOOL_METADATA, TOOL_MODE_ORDER, isModelCompatibleWithTool } from './tool-metadata.js'
 import { getColumnSpacing } from './ui-config.js'
@@ -181,6 +182,8 @@ export function renderTable({
   routerFooterTodayTokens = 0,
   routerFooterAllTimeTokens = 0,
   routerFooterRequests = 0,
+  benchmarkResults = {},
+  benchmarkRunning = new Set(),
 } = {}) {
   // 📖 Filter out hidden models for display
   const visibleResults = results.filter(r => !r.hidden)
@@ -274,6 +277,7 @@ export function renderTable({
   const W_STATUS = 18
   const W_VERDICT = 14
   const W_UPTIME = 6
+  const W_ANSWER = 14
 
   // const W_TOKENS = 7 // Used column removed
   // const W_USAGE = 7 // Usage column removed
@@ -281,16 +285,17 @@ export function renderTable({
 
   // 📖 Responsive column visibility: progressively hide least-useful columns
   // 📖 and shorten header labels when terminal width is insufficient.
-  // 📖 Hiding order (least useful first): Rank → Up% → Tier → Stability
+  // 📖 Hiding order (least useful first): Rank → Answer Speed → Up% → Tier → Stability
   // 📖 Compact mode shrinks: Latest Ping→Lat. P (9), Avg Ping→Avg. P (8),
   // 📖 Stability→StaB. (8), Provider→4chars+… (7), Health→6chars+… (13)
-  // 📖 Breakpoints: full=169 | compact=146 | -Rank=137 | -Up%=128 | -Tier=120 | -Stab=109
+  // 📖 Breakpoints: full=183 | compact=160 | -Rank=151 | -Answer=142 | -Up%=133 | -Tier=125 | -Stab=114
   let wPing = 14
   let wAvg = 11
   let wStab = 11
   let wSource = W_SOURCE
   let wStatus = W_STATUS
   let showRank = true
+  let showAnswerSpeed = true
   let showUptime = true
   let showTier = true
   let showStability = true
@@ -305,6 +310,7 @@ export function renderTable({
       cols.push(W_SWE, W_CTX, W_MODEL, wSource, wPing, wAvg, wStatus, W_VERDICT)
       if (showStability) cols.push(wStab)
       if (showUptime) cols.push(W_UPTIME)
+      if (showAnswerSpeed) cols.push(W_ANSWER)
       return ROW_MARGIN + cols.reduce((a, b) => a + b, 0) + (cols.length - 1) * SEP_W
     }
 
@@ -317,8 +323,9 @@ export function renderTable({
       wSource = 7    // Provider truncated to 4 chars + '…', 7 cols total
       wStatus = 13   // Health truncated after 6 chars + '…'
     }
-    // 📖 Steps 2–5: Progressive column hiding (least useful first)
+    // 📖 Steps 2–6: Progressive column hiding (least useful first)
     if (calcWidth() > terminalCols) showRank = false
+    if (calcWidth() > terminalCols) showAnswerSpeed = false
     if (calcWidth() > terminalCols) showUptime = false
     if (calcWidth() > terminalCols) showTier = false
     if (calcWidth() > terminalCols) showStability = false
@@ -341,6 +348,7 @@ export function renderTable({
     colDefs.push({ name: 'verdict', width: W_VERDICT })
     if (showStability) colDefs.push({ name: 'stability', width: wStab })
     if (showUptime) colDefs.push({ name: 'uptime', width: W_UPTIME })
+    if (showAnswerSpeed) colDefs.push({ name: 'answerSpeed', width: W_ANSWER })
     let x = ROW_MARGIN + 1 // 📖 1-based: first column starts after the 2-char left margin
     const columns = []
     for (let i = 0; i < colDefs.length; i++) {
@@ -467,6 +475,14 @@ export function renderTable({
     return themeColors.hotkey('U') + themeColors.dim('p%' + padding)
   })()
 
+  // 📖 Answer Speed header — no sort hotkey, just the label
+  const answerLabel = isCompact ? 'Answ.' : 'Answer Speed'
+  const answerH_c = (() => {
+    const plain = answerLabel
+    const padding = ' '.repeat(Math.max(0, W_ANSWER - plain.length))
+    return themeColors.dim('Ans') + themeColors.hotkey('w') + themeColors.dim('er' + (isCompact ? '.' : ' Speed') + padding)
+  })()
+
   // 📖 Usage column removed from UI – no header or separator for it.
   // 📖 Header row: conditionally include columns based on responsive visibility
   const headerParts = []
@@ -475,6 +491,7 @@ export function renderTable({
   headerParts.push(sweH_c, ctxH_c, modelH_c, originH_c, pingH_c, avgH_c, healthH_c, verdictH_c)
   if (showStability) headerParts.push(stabH_c)
   if (showUptime) headerParts.push(uptimeH_c)
+  if (showAnswerSpeed) headerParts.push(answerH_c)
   lines.push('  ' + headerParts.join(COL_SEP))
 
   // 📖 Mouse support: the column header row is the last line we just pushed.
@@ -776,6 +793,25 @@ export function renderTable({
     // (We keep the logic but do not render it.)
     const usageCell = ''
 
+    // 📖 Answer Speed column — show benchmark result, running spinner, or dash
+    const benchmarkKey = `${r.providerKey}/${r.modelId}`
+    const benchmarkResult = benchmarkResults[benchmarkKey]
+    const isBenchmarkRunning = benchmarkRunning.has(benchmarkKey)
+    let answerSpeedCell
+    if (isBenchmarkRunning) {
+      const spinner = FRAMES[frame % FRAMES.length]
+      answerSpeedCell = themeColors.success(spinner.padEnd(W_ANSWER))
+    } else if (benchmarkResult) {
+      const text = formatBenchmarkResult(benchmarkResult)
+      // 📖 Colorize: success = green, error = red/dim
+      const isError = !benchmarkResult.ok
+      answerSpeedCell = isError
+        ? themeColors.metricBad(text.padEnd(W_ANSWER))
+        : themeColors.metricGood(text.padEnd(W_ANSWER))
+    } else {
+      answerSpeedCell = themeColors.dim('—'.padEnd(W_ANSWER))
+    }
+
     // 📖 Build row: conditionally include columns based on responsive visibility
     const rowParts = []
     if (showRank) rowParts.push(num)
@@ -783,6 +819,7 @@ export function renderTable({
     rowParts.push(sweCell, ctxCell, nameCell, sourceCell, pingCell, avgCell, status, speedCell)
     if (showStability) rowParts.push(stabCell)
     if (showUptime) rowParts.push(uptimeCell)
+    if (showAnswerSpeed) rowParts.push(answerSpeedCell)
     const row = '  ' + rowParts.join(COL_SEP)
 
     if (isCursor) {

@@ -54,6 +54,7 @@ import {
   restartRouterDashboardDaemon,
   toggleRouterDashboardProbePause,
 } from './router-dashboard.js'
+import { benchmarkModel } from './benchmark.js'
 
 // 📖 Some providers need an explicit probe model because the first catalog entry
 // 📖 is not guaranteed to be accepted by their chat endpoint.
@@ -1024,6 +1025,42 @@ export function createKeyHandler(ctx) {
     if (!state.config.settings || typeof state.config.settings !== 'object') state.config.settings = {}
     state.config.settings.preferredToolMode = state.mode
     saveConfig(state.config)
+  }
+
+  // 📖 runBenchmarkOnSelected: Fire a real-answer benchmark on the currently selected row.
+  // 📖 Triggered by Ctrl+A. Async — does not block the UI. Results are stored in state
+  // 📖 keyed by `${providerKey}/${modelId}` so they survive re-renders.
+  async function runBenchmarkOnSelected() {
+    const selected = state.visibleSorted[state.cursor]
+    if (!selected) return
+
+    const benchmarkKey = `${selected.providerKey}/${selected.modelId}`
+    if (state.benchmarkRunning.has(benchmarkKey)) return
+
+    const apiKey = getApiKey(state.config, selected.providerKey) ?? null
+    const providerUrl = sources[selected.providerKey]?.url ?? null
+    if (!providerUrl) return
+
+    state.benchmarkRunning.add(benchmarkKey)
+
+    try {
+      const result = await benchmarkModel({
+        apiKey,
+        modelId: selected.modelId,
+        providerKey: selected.providerKey,
+        url: providerUrl,
+      })
+      state.benchmarkResults[benchmarkKey] = result
+    } catch (err) {
+      state.benchmarkResults[benchmarkKey] = {
+        ok: false,
+        code: 'ERR',
+        totalMs: 0,
+        error: err?.message || 'Benchmark failed',
+      }
+    } finally {
+      state.benchmarkRunning.delete(benchmarkKey)
+    }
   }
 
   // 📖 Favorites display mode:
@@ -2808,6 +2845,13 @@ export function createKeyHandler(ctx) {
     // 📖 Mode toggle key: Z cycles through the supported tool targets.
     if (key.name === 'z') {
       cycleToolMode()
+      return
+    }
+
+    // 📖 Ctrl+A: benchmark the currently selected model with a real completion.
+    // 📖 Measures wall-clock response time and tokens per second (TPS).
+    if (key.ctrl && key.name === 'a') {
+      void runBenchmarkOnSelected()
       return
     }
 
