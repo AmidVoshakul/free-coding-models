@@ -45,7 +45,7 @@ Start the TUI pre-configured to a specific tool. Press `Enter` on a model to aut
 
 | Flag | Type | Description |
 |------|------|-------------|
-| `--sort <column>` | value | Start sorted by a specific column. Valid values: `rank`, `tier`, `origin`, `model`, `ping`, `avg`, `swe`, `ctx`, `condition`, `verdict`, `uptime`, `stability`. |
+| `--sort <column>` | value | Start sorted by a specific column. Valid values: `rank`, `tier`, `origin`, `model`, `ping`, `avg`, `swe`, `ctx`, `condition`, `verdict`, `uptime`, `stability`, `aiLatency`, `tps`. |
 | `--asc` | boolean | Sort ascending (smallest first). |
 | `--desc` | boolean | Sort descending (largest first). |
 

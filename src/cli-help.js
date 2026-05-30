@@ -27,7 +27,7 @@ const ANALYSIS_FLAGS = [
   { flag: '--tier <S|A|B|C>', description: 'Filter models by tier family' },
   { flag: '--recommend', description: 'Open Smart Recommend immediately on startup' },
   { flag: '--premium', description: 'Start with S-tier filter + verdict sort (you can reset it in-app)' },
-  { flag: '--sort <column>', description: 'Sort by column (rank, tier, origin, model, ping, avg, swe, ctx, condition, verdict, uptime, stability, usage)' },
+  { flag: '--sort <column>', description: 'Sort by column (rank, tier, origin, model, ping, avg, swe, ctx, condition, verdict, uptime, stability, aiLatency, tps)' },
   { flag: '--desc | --asc', description: 'Set sort direction (descending or ascending)' },
   { flag: '--origin <provider>', description: 'Filter models by provider origin' },
   { flag: '--ping-interval <ms>', description: 'Override ping interval in milliseconds' },
