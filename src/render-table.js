@@ -875,19 +875,17 @@ export function renderTable({
       ? formatBenchmarkLatency(benchmarkResult, { running: true, frame })
       : benchmarkOk
         ? formatBenchmarkLatency(benchmarkResult)
-        : hasBenchmark
-          ? '—'
-          : statusDisplayText
+        : '—'
     const tpsText = isBenchmarkRunning
       ? formatBenchmarkTps(benchmarkResult, { running: true, frame })
       : benchmarkOk
         ? formatBenchmarkTps(benchmarkResult)
         : '—'
-    const latencyCell = !hasBenchmark
-      ? statusColor(padEndDisplay(latencyText, wAiLatency))
-      : benchmarkOk
-        ? themeColors.metricGood(latencyText.padEnd(wAiLatency))
-        : themeColors.metricBad(latencyText.padEnd(wAiLatency))
+    const latencyCell = benchmarkOk
+      ? themeColors.metricGood(latencyText.padEnd(wAiLatency))
+      : hasBenchmark || !benchmarkOk
+        ? themeColors.metricBad(latencyText.padEnd(wAiLatency))
+        : themeColors.dim(latencyText.padEnd(wAiLatency))
     const tpsCell = benchmarkOk || isBenchmarkRunning
       ? themeColors.metricGood(tpsText.padEnd(W_TPS))
       : hasBenchmark
