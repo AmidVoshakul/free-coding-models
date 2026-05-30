@@ -941,11 +941,13 @@ export async function runApp(cliArgs, config) {
 
   // 📖 Startup AI Speed Scan: opt-in setting that reuses the Ctrl+U path so the
   // 📖 automatic launch stays identical to the manual global benchmark behavior.
-  const startAiSpeedScanOnStartup = () => {
+  // 📖 1.5s delay ensures the TUI has rendered at least one full frame and the
+  // 📖 keypress handler pipeline is live before we simulate Ctrl+U.
+  const scheduleAiSpeedScanOnStartup = () => {
     if (state.config.settings?.runAiSpeedTestOnStartup !== true) return
-    setImmediate(() => {
+    setTimeout(() => {
       onKeyPress?.('\x15', { name: 'u', ctrl: true, meta: false, shift: false })?.catch(() => {})
-    })
+    }, 1500)
   }
 
   // ── Continuous ping loop — ping all models every N seconds forever ──────────
@@ -1009,7 +1011,7 @@ export async function runApp(cliArgs, config) {
   scheduleNextPing()
 
   await initialPing
-  startAiSpeedScanOnStartup()
+  scheduleAiSpeedScanOnStartup()
 
   // 📖 Save cache after initial pings complete for faster next startup
   saveCache(state.results, state.pingMode)
