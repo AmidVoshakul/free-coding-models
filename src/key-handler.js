@@ -1041,6 +1041,31 @@ export function createKeyHandler(ctx) {
     saveConfig(state.config)
   }
 
+  // 📖 updateHealthFromBenchmark: When a benchmark reveals the real status of a model
+  // 📖 (e.g. it was marked 'down' but actually returns 429, or was 'timeout' but now responds),
+  // 📖 update the model's health status so the Health column stays accurate.
+  function updateHealthFromBenchmark(model, result) {
+    if (!result || result.ok) {
+      // 📖 Benchmark succeeded → model is definitely up
+      if (model.status !== 'up') model.status = 'up'
+      return
+    }
+    const code = result.code
+    if (code === 'TIMEOUT') {
+      model.status = 'timeout'
+    } else if (code === '401' || code === '403') {
+      const hasKey = !!getApiKey(state.config, model.providerKey)
+      model.status = hasKey ? 'auth_error' : 'noauth'
+      model.httpCode = code
+    } else if (code === '429') {
+      model.status = 'down'
+      model.httpCode = '429'
+    } else if (code && code !== 'ERR' && code !== 'UNSUPPORTED') {
+      model.status = 'down'
+      model.httpCode = code
+    }
+  }
+
   // 📖 runBenchmarkOnSelected: Fire a real-answer benchmark on the currently selected row.
   // 📖 Triggered by Ctrl+A. Async — does not block the UI. Results are stored in state
   // 📖 keyed by `${providerKey}/${modelId}` so they survive re-renders.
@@ -1066,6 +1091,7 @@ export function createKeyHandler(ctx) {
         url: providerUrl,
       })
       state.benchmarkResults[benchmarkKey] = result
+      updateHealthFromBenchmark(selected, result)
     } catch (err) {
       state.benchmarkResults[benchmarkKey] = {
         ok: false,
@@ -1131,6 +1157,7 @@ export function createKeyHandler(ctx) {
           url: providerUrl,
         })
         state.benchmarkResults[benchmarkKey] = result
+        updateHealthFromBenchmark(model, result)
         return { ok: result.ok }
       } catch (err) {
         state.benchmarkResults[benchmarkKey] = {

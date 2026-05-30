@@ -403,6 +403,7 @@ export function renderTable({
   // 📖 Sort models using the shared helper
   const sorted = sortResultsWithPinnedFavorites(visibleResults, sortColumn, sortDirection, {
     pinFavorites: favoritesPinnedAndSticky,
+    benchmarkResults,
   })
 
   const lines = [
@@ -531,11 +532,21 @@ export function renderTable({
   // 📖 Benchmark headers — split the old combined AI Speed field into latency + throughput.
   const aiLatencyLabel = isCompact ? 'AI Lat.' : 'AI Latency'
   const aiLatencyH_c = (() => {
+    if (headerFlashColumn === 'aiLatency') {
+      const ft = (dir + ' ' + aiLatencyLabel).length <= wAiLatency ? dir + ' ' + aiLatencyLabel : aiLatencyLabel + dir
+      return flashHeader(ft, wAiLatency)
+    }
+    if (sortColumn === 'aiLatency') return sortActiveHeader(aiLatencyLabel, wAiLatency)
     const plain = aiLatencyLabel
     const padding = ' '.repeat(Math.max(0, wAiLatency - plain.length))
     return themeColors.dim(plain + padding)
   })()
   const tpsH_c = (() => {
+    if (headerFlashColumn === 'tps') {
+      const ft = (dir + ' ' + 'TPS').length <= W_TPS ? dir + ' ' + 'TPS' : 'TPS' + dir
+      return flashHeader(ft, W_TPS)
+    }
+    if (sortColumn === 'tps') return sortActiveHeader('TPS', W_TPS)
     const plain = 'TPS'
     const padding = ' '.repeat(Math.max(0, W_TPS - plain.length))
     return themeColors.dim(plain + padding)
@@ -853,26 +864,35 @@ export function renderTable({
 
     // 📖 AI Latency + TPS columns — same benchmark result, split into two readable metrics.
     // 📖 Benchmark results are shown regardless of health status (up/timeout/down/429/noauth).
+    // 📖 If benchmark failed → red dash. Error details live in the Health column.
     // 📖 If no benchmark has been run yet, fallback to health status display for latency.
     const benchmarkKey = `${r.providerKey}/${r.modelId}`
     const benchmarkResult = benchmarkResults[benchmarkKey]
     const isBenchmarkRunning = benchmarkRunning.has(benchmarkKey)
     const hasBenchmark = benchmarkResult || isBenchmarkRunning
-    const latencyText = hasBenchmark
-      ? formatBenchmarkLatency(benchmarkResult, { running: isBenchmarkRunning, frame })
-      : statusDisplayText
-    const tpsText = hasBenchmark
-      ? formatBenchmarkTps(benchmarkResult, { running: isBenchmarkRunning, frame })
-      : '—'
-    const benchmarkIsError = benchmarkResult && !benchmarkResult.ok
+    const benchmarkOk = benchmarkResult && benchmarkResult.ok
+    const latencyText = isBenchmarkRunning
+      ? formatBenchmarkLatency(benchmarkResult, { running: true, frame })
+      : benchmarkOk
+        ? formatBenchmarkLatency(benchmarkResult)
+        : hasBenchmark
+          ? '—'
+          : statusDisplayText
+    const tpsText = isBenchmarkRunning
+      ? formatBenchmarkTps(benchmarkResult, { running: true, frame })
+      : benchmarkOk
+        ? formatBenchmarkTps(benchmarkResult)
+        : '—'
     const latencyCell = !hasBenchmark
       ? statusColor(padEndDisplay(latencyText, wAiLatency))
-      : benchmarkIsError
-        ? themeColors.metricBad(latencyText.padEnd(wAiLatency))
-        : themeColors.metricGood(latencyText.padEnd(wAiLatency))
-    const tpsCell = hasBenchmark && (benchmarkResult?.ok || isBenchmarkRunning)
+      : benchmarkOk
+        ? themeColors.metricGood(latencyText.padEnd(wAiLatency))
+        : themeColors.metricBad(latencyText.padEnd(wAiLatency))
+    const tpsCell = benchmarkOk || isBenchmarkRunning
       ? themeColors.metricGood(tpsText.padEnd(W_TPS))
-      : themeColors.dim(tpsText.padEnd(W_TPS))
+      : hasBenchmark
+        ? themeColors.metricBad(tpsText.padEnd(W_TPS))
+        : themeColors.dim(tpsText.padEnd(W_TPS))
 
     // 📖 Build row: conditionally include columns based on responsive visibility
     const rowParts = []
