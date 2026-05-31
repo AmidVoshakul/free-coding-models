@@ -6,7 +6,17 @@
 import { useState, useEffect } from 'react'
 import styles from './FilterBar.module.css'
 
-const TIERS = ['All', 'S+', 'S', 'A+', 'A', 'A-', 'B+', 'B', 'C']
+const TIERS = [
+  { key: 'all', label: 'All' },
+  { key: 'S+', label: 'S+' },
+  { key: 'S', label: 'S' },
+  { key: 'A+', label: 'A+' },
+  { key: 'A', label: 'A' },
+  { key: 'A-', label: 'A-' },
+  { key: 'B+', label: 'B+' },
+  { key: 'B', label: 'B' },
+  { key: 'C', label: 'C' },
+]
 const STATUSES = [
   { key: 'all', label: 'All' },
   { key: 'up', label: 'Online' },
@@ -85,11 +95,11 @@ export default function FilterBar({
         <div className={styles.tierRow}>
           {TIERS.map(t => (
             <button
-              key={t}
-              className={`${styles.tierBtn} ${filterTier === t ? styles.active : ''}`}
-              onClick={() => setFilterTier(t)}
+              key={t.key}
+              className={`${styles.tierBtn} ${filterTier === t.key ? styles.active : ''}`}
+              onClick={() => setFilterTier(t.key)}
             >
-              {t}
+              {t.label}
             </button>
           ))}
         </div>

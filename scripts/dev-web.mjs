@@ -61,7 +61,7 @@ startWebServer(${API_PORT}, { open: false, startPingLoop: true }).then(() => {})
   let portReady = false
   for (let i = 0; i < 30; i++) {
     await new Promise(r => setTimeout(r, 300))
-    portReady = !(await isPortUsed(API_PORT))
+    portReady = await isPortUsed(API_PORT)
     if (portReady) break
   }
 

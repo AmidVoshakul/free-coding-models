@@ -4,7 +4,7 @@
  */
 .container {
   background: var(--color-bg-card);
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-border-hover);
   border-radius: var(--radius-lg);
   margin: 16px;
   flex: 1;
@@ -19,6 +19,7 @@
   min-width: 1200px;
   border-collapse: collapse;
   font-size: 12px;
+  border: 1px solid var(--color-border-hover);
 }
 
 /* ─── Header ─── */
@@ -30,7 +31,8 @@
   letter-spacing: 0.5px;
   color: var(--color-text-muted);
   background: var(--color-bg-elevated);
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border-hover);
+  border-right: 1px solid var(--color-border);
   white-space: nowrap;
   user-select: none;
   position: sticky;
@@ -38,6 +40,7 @@
   z-index: 10;
   text-align: center;
 }
+.th:last-child { border-right: 0; }
 .th:hover { color: var(--color-accent); background: var(--color-bg-active); }
 
 /* Center certain columns */
@@ -53,8 +56,10 @@
 .td {
   padding: 7px 8px;
   border-bottom: 1px solid var(--color-border);
+  border-right: 1px solid var(--color-border);
   white-space: nowrap;
 }
+.td:last-child { border-right: 0; }
 .td:nth-child(6) { text-align: left; }   /* Model */
 .td:nth-child(7) { text-align: left; }   /* Provider */
 .td:nth-child(11) { text-align: left; } /* Verdict */
@@ -113,5 +118,27 @@
   border: 1px solid var(--color-border); white-space: nowrap;
 }
 
+/* ─── Benchmarking row highlight ── */
+@keyframes benchRowPulse {
+  0%, 100% { background: rgba(180, 0, 255, 0.04); }
+  50%       { background: rgba(180, 0, 255, 0.10); }
+}
+.benchRow {
+  animation: benchRowPulse 1.2s ease-in-out infinite;
+}
+
 /* ─── Empty state ─── */
+:global([data-theme="light"]) .container {
+  border-color: #cfcfcf;
+}
+
+:global([data-theme="light"]) .table {
+  border-color: #cfcfcf;
+}
+
+:global([data-theme="light"]) .th,
+:global([data-theme="light"]) .td {
+  border-color: #d8d8d8;
+}
+
 .empty { text-align: center; padding: 60px 0; color: var(--color-text-muted); }

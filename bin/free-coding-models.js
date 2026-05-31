@@ -53,6 +53,16 @@ async function main() {
     process.exit(0);
   }
 
+  // 📖 Standalone web dashboard: same full-catalog ping UI as the TUI, served
+  // 📖 locally with Socket.IO/SSE/REST realtime updates.
+  if (cliArgs.webMode) {
+    const { startWebServer } = await import('../web/server.js');
+    const parsedPort = Number.parseInt(process.env.FCM_WEB_PORT || process.env.FCM_PORT || '3333', 10);
+    const port = Number.isFinite(parsedPort) && parsedPort > 0 ? parsedPort : 3333;
+    await startWebServer(port, { open: true, startPingLoop: true });
+    return;
+  }
+
   // 📖 Router daemon lifecycle flags run before the TUI so automation and
   // 📖 editor integrations can manage the local OpenAI-compatible endpoint.
   if (cliArgs.daemonMode || cliArgs.daemonBackgroundMode || cliArgs.daemonStopMode || cliArgs.daemonStatusMode) {

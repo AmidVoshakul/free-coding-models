@@ -17,7 +17,7 @@
 }
 .tierBtn:hover { background: var(--color-bg-hover); color: var(--color-text); }
 .active {
-  background: var(--color-accent) !important; color: #000 !important;
+  background: var(--color-accent) !important; color: var(--color-bg) !important;
   border-color: var(--color-accent) !important; font-weight: 700;
 }
 .providerSelect {

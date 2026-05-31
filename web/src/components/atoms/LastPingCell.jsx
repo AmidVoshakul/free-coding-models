@@ -1,7 +1,8 @@
 /**
  * @file web/src/components/atoms/LastPingCell.jsx
- * @description Last ping latency in ms with color coding — matches CLI Last Ping column.
- * 📖 Color: <500ms green, <1500ms yellow, ≥1500ms red, null/dash dim.
+ * @description Last ping latency number with color coding + animated spinner during pings.
+ * 📖 Values are milliseconds, displayed without the `ms` suffix to keep table cells compact.
+ * 📖 During ping rounds: animated CSS spinner shows which models are being tested.
  */
 import styles from './LastPingCell.module.css'
 
@@ -13,10 +14,22 @@ function pingClass(ms) {
 }
 
 export default function LastPingCell({ ms, isPinging }) {
-  if (ms == null) return <span className={`${styles.cell} ${styles.none}`}>—</span>
+  if (ms == null) {
+    return (
+      <span className={`${styles.cell} ${styles.none}`}>
+        {isPinging ? (
+          <span className={styles.spinner} title="Testing…" />
+        ) : (
+          '—'
+        )}
+      </span>
+    )
+  }
 
-  let display = `${ms}ms`
-  if (isPinging) display += ' ⠴'  // braille spinner
-
-  return <span className={`${styles.cell} ${pingClass(ms)}`}>{display}</span>
+  return (
+    <span className={`${styles.cell} ${pingClass(ms)}`}>
+      <span className={styles.value}>{ms}</span>
+      {isPinging && <span className={styles.spinner} />}
+    </span>
+  )
 }

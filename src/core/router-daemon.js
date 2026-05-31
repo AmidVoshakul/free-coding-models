@@ -48,6 +48,7 @@ import {
   saveConfig,
 } from './config.js'
 import { buildChatCompletionPingBody, resolveCloudflareUrl, shouldUseDisabledThinkingForProvider } from './ping.js'
+import { benchmarkModel, BENCHMARK_TIMEOUT_MS } from './benchmark.js'
 import { sendUsageTelemetry } from './telemetry.js'
 
 export const ROUTER_DEFAULT_PORT = 19280
@@ -343,10 +344,30 @@ function getWebModelsPayload(runtime) {
         pingCount: pings.length,
         hasApiKey,
         inRouterSet: inSetIndex.has(`${providerKey}::${modelId}`),
+        benchmarkKey: key,
+        isBenchmarking: runtime.webBenchmarkRunning?.has(key) || false,
+        benchmark: runtime.webBenchmarkResults?.get(key) || null,
       })
     }
   }
   return payload
+}
+
+function getWebStatePayload(runtime) {
+  const router = runtime.routerConfig()
+  const probeInterval = router.probeIntervals?.[router.probeMode] || DEFAULT_ROUTER_SETTINGS.probeIntervals.balanced
+  return {
+    pingMode: router.probeMode === 'aggressive' ? 'speed' : router.probeMode === 'eco' ? 'slow' : 'normal',
+    pingModeSource: 'daemon-probe-mode',
+    pingInterval: probeInterval,
+    nextPingAt: runtime.lastProbeAt ? runtime.lastProbeAt + probeInterval : null,
+    pendingPings: runtime.probeTimeouts?.size || 0,
+    isPinging: (runtime.probeTimeouts?.size || 0) > 0,
+    globalBenchmarkRunning: runtime.webGlobalBenchmarkRunning || false,
+    globalBenchmarkTotal: runtime.webGlobalBenchmarkTotal || 0,
+    globalBenchmarkCompleted: runtime.webGlobalBenchmarkCompleted || 0,
+    models: getWebModelsPayload(runtime),
+  }
 }
 
 function getWebConfigPayload(runtime) {
@@ -786,6 +807,11 @@ class RouterRuntime {
     this.quotaExhausted = new Set()
     this.quotaDetails = new Map()
     this.staleNotifications = new Set()
+    this.webBenchmarkRunning = new Set()
+    this.webBenchmarkResults = new Map()
+    this.webGlobalBenchmarkRunning = false
+    this.webGlobalBenchmarkTotal = 0
+    this.webGlobalBenchmarkCompleted = 0
     this.refreshRouteState()
   }
 
@@ -1129,6 +1155,99 @@ class RouterRuntime {
         this.sseClients.delete(client)
       }
     }
+  }
+
+  broadcastWebState() {
+    this.broadcast('models', getWebStatePayload(this))
+  }
+
+  async runWebBenchmark(providerKey, modelId) {
+    const key = modelKey(providerKey, modelId)
+    if (this.webBenchmarkRunning.has(key)) return { skipped: true }
+    const source = sources[providerKey]
+    if (!source?.url) {
+      return { ok: false, code: 'UNSUPPORTED', totalMs: 0, error: 'Provider has no benchmark URL', retries: 0 }
+    }
+
+    this.webBenchmarkRunning.add(key)
+    this.broadcastWebState()
+    try {
+      const result = await benchmarkModel({
+        apiKey: this.getApiKeyForProvider(providerKey) ?? null,
+        modelId,
+        providerKey,
+        url: source.url,
+        timeoutMs: BENCHMARK_TIMEOUT_MS,
+      })
+      this.webBenchmarkResults.set(key, result)
+      return result
+    } catch (err) {
+      const fallback = { ok: false, code: 'ERR', totalMs: 0, error: err?.message || 'Benchmark failed', retries: 0 }
+      this.webBenchmarkResults.set(key, fallback)
+      return fallback
+    } finally {
+      this.webBenchmarkRunning.delete(key)
+      this.broadcastWebState()
+    }
+  }
+
+  async runWebGlobalBenchmark(models) {
+    if (this.webGlobalBenchmarkRunning) return { started: false, error: 'Global benchmark already running' }
+    const knownModels = []
+    const seen = new Set()
+    for (const item of Array.isArray(models) ? models : []) {
+      const providerKey = typeof item?.providerKey === 'string' ? item.providerKey : ''
+      const modelId = typeof item?.modelId === 'string' ? item.modelId : ''
+      const key = modelKey(providerKey, modelId)
+      if (!this.modelCatalog.has(key) || seen.has(key)) continue
+      seen.add(key)
+      knownModels.push({ providerKey, modelId, key })
+    }
+
+    const fallbackModels = knownModels.length > 0
+      ? knownModels
+      : [...this.modelCatalog.values()].filter((m) => sources[m.providerKey]?.url && !sources[m.providerKey]?.cliOnly)
+
+    this.webGlobalBenchmarkRunning = true
+    this.webGlobalBenchmarkTotal = fallbackModels.length
+    this.webGlobalBenchmarkCompleted = 0
+    this.broadcastWebState()
+
+    const healthPriority = { up: 0, pending: 1, timeout: 2, noauth: 3, auth_error: 4, down: 5 }
+    const sorted = [...fallbackModels].sort((a, b) => {
+      const aw = this.probeWindows.get(modelKey(a.providerKey, a.modelId)) || []
+      const bw = this.probeWindows.get(modelKey(b.providerKey, b.modelId)) || []
+      const aLast = aw.at(-1)
+      const bLast = bw.at(-1)
+      const aState = aLast?.ok ? 'up' : aw.length ? 'down' : 'pending'
+      const bState = bLast?.ok ? 'up' : bw.length ? 'down' : 'pending'
+      const hpA = healthPriority[aState] ?? 6
+      const hpB = healthPriority[bState] ?? 6
+      if (hpA !== hpB) return hpA - hpB
+      return (aLast?.latencyMs ?? 99999) - (bLast?.latencyMs ?? 99999)
+    })
+
+    const workers = new Array(Math.min(5, sorted.length)).fill(null).map(async () => {
+      while (sorted.length > 0) {
+        const next = sorted.shift()
+        if (!next) break
+        try {
+          await this.runWebBenchmark(next.providerKey, next.modelId)
+        } finally {
+          this.webGlobalBenchmarkCompleted += 1
+          this.broadcastWebState()
+        }
+      }
+    })
+
+    void Promise.all(workers).finally(() => {
+      this.webGlobalBenchmarkRunning = false
+      this.webGlobalBenchmarkTotal = 0
+      this.webGlobalBenchmarkCompleted = 0
+      this.broadcastWebState()
+    })
+
+    return { started: true, total: fallbackModels.length }
   }
 
   statusPayload() {
@@ -1892,6 +2011,10 @@ class RouterRuntime {
         sendJson(res, 200, getWebModelsPayload(this), { 'x-request-id': requestId })
         return
       }
+      if (req.method === 'GET' && url.pathname === '/api/state') {
+        sendJson(res, 200, getWebStatePayload(this), { 'x-request-id': requestId })
+        return
+      }
       if (req.method === 'GET' && url.pathname === '/api/config') {
         sendJson(res, 200, getWebConfigPayload(this), { 'x-request-id': requestId })
         return
@@ -1907,9 +2030,51 @@ class RouterRuntime {
           'Connection': 'keep-alive',
           'x-request-id': requestId,
         })
-        res.write(`data: ${JSON.stringify(getWebModelsPayload(this))}\n\n`)
+        res.write(`data: ${JSON.stringify(getWebStatePayload(this))}\n\n`)
         this.sseClients.add(res)
         req.on('close', () => this.sseClients.delete(res))
+        return
+      }
+      if (req.method === 'POST' && url.pathname === '/api/activity') {
+        sendJson(res, 200, { ok: true }, { 'x-request-id': requestId })
+        return
+      }
+      if (req.method === 'POST' && url.pathname === '/api/benchmark') {
+        const body = await readJsonBody(req)
+        const providerKey = typeof body.providerKey === 'string' ? body.providerKey : ''
+        const modelId = typeof body.modelId === 'string' ? body.modelId : ''
+        if (!this.modelCatalog.has(modelKey(providerKey, modelId))) {
+          sendJson(res, 404, { error: 'Model not found' }, { 'x-request-id': requestId })
+          return
+        }
+        if (this.webBenchmarkRunning.has(modelKey(providerKey, modelId))) {
+          sendJson(res, 409, { error: 'Benchmark already in progress for this model' }, { 'x-request-id': requestId })
+          return
+        }
+        const result = await this.runWebBenchmark(providerKey, modelId)
+        sendJson(res, 200, result, { 'x-request-id': requestId })
+        return
+      }
+      if (url.pathname === '/api/global-benchmark') {
+        if (req.method === 'GET') {
+          sendJson(res, 200, {
+            running: this.webGlobalBenchmarkRunning,
+            total: this.webGlobalBenchmarkTotal,
+            completed: this.webGlobalBenchmarkCompleted,
+          }, { 'x-request-id': requestId })
+          return
+        }
+        if (req.method !== 'POST') {
+          sendError(res, 405, 'Method not allowed', 'invalid_request_error', 'method_not_allowed', requestId)
+          return
+        }
+        if (this.webGlobalBenchmarkRunning) {
+          sendJson(res, 409, { error: 'Global benchmark already running' }, { 'x-request-id': requestId })
+          return
+        }
+        const body = await readJsonBody(req)
+        const result = await this.runWebGlobalBenchmark(body.models)
+        sendJson(res, result.started ? 202 : 409, result, { 'x-request-id': requestId })
         return
       }
       if (req.method === 'GET' && url.pathname.startsWith('/api/key/')) {

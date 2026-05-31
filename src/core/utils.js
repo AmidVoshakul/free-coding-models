@@ -471,6 +471,8 @@ export function parseArgs(argv) {
       flags.push(arg.toLowerCase())
     } else if (skipIndices.has(i)) {
       // 📖 Skip — this is a value for --tier, not an API key
+    } else if (i === 0 && arg.toLowerCase() === 'web') {
+      // 📖 `free-coding-models web` is a subcommand, not a provider API key.
     } else if (!apiKey) {
       apiKey = arg
     }

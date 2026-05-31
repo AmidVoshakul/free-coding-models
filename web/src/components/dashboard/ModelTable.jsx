@@ -30,6 +30,11 @@ import styles from './ModelTable.module.css'
 
 const colHelper = createColumnHelper()
 
+const SORTABLE_COLUMN_IDS = new Set([
+  'mood', 'idx', 'tier', 'sweScore', 'ctx', 'label', 'origin', 'latestPing',
+  'avg', 'condition', 'verdict', 'stability', 'uptime', 'aiLatency', 'tps', 'trend',
+])
+
 // ─── Cell renderers ───────────────────────────────────────────────────────────
 function MoodCellRenderer({ row }) {
   return <MoodCell verdict={row.original.verdict} />
@@ -73,7 +78,7 @@ function LastPingCellRenderer({ row }) {
   const m = row.original
   const hist = m.pingHistory || m.pings || []
   const latest = hist.length > 0 ? hist[hist.length - 1] : null
-  return <LastPingCell ms={latest?.ms ?? null} isPinging={m.isPinging || false} />
+  return <LastPingCell ms={latest?.ms ?? null} isPinging={Boolean(m.isPinging)} />
 }
 
 function AvgPingCellRenderer({ row }) {
@@ -81,7 +86,7 @@ function AvgPingCellRenderer({ row }) {
   const cls = pingClass(m.avg)
   return (
     <span className={`${styles.ping} ${styles[cls]}`}>
-      {m.avg == null || m.avg === Infinity || m.avg > 99000 ? '—' : `${m.avg}ms`}
+      {m.avg == null || m.avg === Infinity || m.avg > 99000 ? '—' : m.avg}
     </span>
   )
 }
@@ -107,12 +112,12 @@ function UptimeCellRenderer({ row }) {
 
 function AILatencyCellRenderer({ row }) {
   const m = row.original
-  return <AILatencyCell result={m.benchmark || null} isRunning={false} frame={0} />
+  return <AILatencyCell result={m.benchmark || null} isRunning={Boolean(m.isBenchmarking)} />
 }
 
 function TPSCellRenderer({ row }) {
   const m = row.original
-  return <TPSCell result={m.benchmark || null} isRunning={false} frame={0} />
+  return <TPSCell result={m.benchmark || null} isRunning={Boolean(m.isBenchmarking)} />
 }
 
 function TrendCellRenderer({ row }) {
@@ -131,6 +136,7 @@ const columns = [
   colHelper.accessor('idx', {
     header: '#',
     size: 36,
+    enableSorting: true,
     cell: ({ getValue, row }) => (
       <span className={styles.rankNum}>{getValue() ?? row.index + 1}</span>
     ),
@@ -138,26 +144,31 @@ const columns = [
   colHelper.accessor('tier', {
     header: 'Tier',
     size: 48,
+    enableSorting: true,
     cell: ({ getValue }) => <TierBadge tier={getValue()} />,
   }),
   colHelper.accessor('sweScore', {
     header: 'SWE%',
     size: 52,
+    enableSorting: true,
     cell: SWECellRenderer,
   }),
   colHelper.accessor('ctx', {
     header: 'CTX',
     size: 48,
+    enableSorting: true,
     cell: CtxCellRenderer,
   }),
   colHelper.accessor('label', {
     header: 'Model',
     size: 200,
+    enableSorting: true,
     cell: ModelCellRenderer,
   }),
   colHelper.accessor('origin', {
     header: 'Provider',
     size: 110,
+    enableSorting: true,
     cell: ProviderCellRenderer,
   }),
   colHelper.display({
@@ -170,27 +181,32 @@ const columns = [
   colHelper.accessor('avg', {
     header: 'Avg',
     size: 72,
+    enableSorting: true,
     cell: AvgPingCellRenderer,
   }),
   colHelper.accessor('status', {
     id: 'condition',
     header: 'Health',
     size: 120,
+    enableSorting: true,
     cell: HealthCellRenderer,
   }),
   colHelper.accessor('verdict', {
     header: 'Verdict',
     size: 100,
+    enableSorting: true,
     cell: VerdictCellRenderer,
   }),
   colHelper.accessor('stability', {
     header: 'Stability',
     size: 90,
+    enableSorting: true,
     cell: StabilityCellRenderer,
   }),
   colHelper.accessor('uptime', {
     header: 'Up%',
     size: 48,
+    enableSorting: true,
     cell: UptimeCellRenderer,
   }),
   colHelper.display({
@@ -212,6 +228,7 @@ const columns = [
     header: 'Trend',
     size: 96,
     cell: TrendCellRenderer,
+    enableSorting: true,
   }),
 ]
 
@@ -235,6 +252,7 @@ export default function ModelTable({ filtered, onSelectModel, sortColumn, sortDi
   const table = useReactTable({
     data: filtered,
     columns,
+    defaultColumn: { enableSorting: true },
     getCoreRowModel: getCoreRowModel(),
   })
 
@@ -252,14 +270,14 @@ export default function ModelTable({ filtered, onSelectModel, sortColumn, sortDi
             <tr key={headerGroup.id}>
               {headerGroup.headers.map(header => {
                 const col = header.column
-                const canSort = col.getCanSort()
+                const canSort = SORTABLE_COLUMN_IDS.has(col.id)
                 return (
                   <th
                     key={header.id}
                     className={styles.th}
                     onClick={canSort ? () => onSort(header.id) : undefined}
                     style={{ cursor: canSort ? 'pointer' : 'default' }}
-                    title={col.columnDef.header}
+                    title={`Sort ${col.columnDef.header}: asc → desc → reset`}
                   >
                     {flexRender(col.columnDef.header, header.getContext())}
                     {canSort && (
@@ -281,12 +299,17 @@ export default function ModelTable({ filtered, onSelectModel, sortColumn, sortDi
         </thead>
         <tbody>
           {rows.map((row, i) => {
-            const rankIdx = [...top3Ids].indexOf(row.original.modelId)
+            const m = row.original
+            const rankIdx = [...top3Ids].indexOf(m.modelId)
             const rowClass = rankIdx >= 0 ? styles[`rank${rankIdx + 1}`] : ''
+            // 📖 Per-row benchmark state comes from the backend. The old global
+            // 📖 heuristic made every unbenchmarked row spin until the whole scan ended.
+            const isBenchRunning = Boolean(m.isBenchmarking)
+            const benchRowClass = isBenchRunning ? ` ${styles.benchRow}` : ''
             return (
               <tr
                 key={row.id}
-                className={rowClass}
+                className={`${rowClass}${benchRowClass}`}
                 onClick={() => onSelectModel(row.original)}
               >
                 {row.getVisibleCells().map(cell => (

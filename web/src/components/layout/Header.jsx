@@ -1,7 +1,7 @@
 /**
  * @file web/src/components/layout/Header.jsx
  * @description Top header bar with search, AI Latency benchmark button, export, settings, and theme toggle.
- * 📖 AI Latency button is always visible — benchmarks the fastest online model when no row is selected.
+ * 📖 AI Latency button benchmarks the models currently visible after filters/search.
  */
 import { IconBolt, IconSearch, IconDownload, IconSettings, IconMoon, IconSun, IconPlayerPlay } from '@tabler/icons-react'
 import styles from './Header.module.css'
@@ -9,7 +9,7 @@ import styles from './Header.module.css'
 export default function Header({
   searchQuery, onSearchChange,
   onToggleTheme, onOpenSettings, onOpenExport,
-  onBenchmark, benchmarkRunning, modelsCount, theme,
+  onBenchmark, benchmarkRunning, benchmarkTotal, benchmarkCompleted, modelsCount, theme,
 }) {
   return (
     <header className={styles.header}>
@@ -44,13 +44,13 @@ export default function Header({
           className={`${styles.benchmarkBtn} ${benchmarkRunning ? styles.benchmarkActive : ''}`}
           onClick={onBenchmark}
           disabled={benchmarkRunning}
-          title={benchmarkRunning ? 'AI Latency test running…' : `Run AI Latency benchmark on ${modelsCount} models`}
+          title={benchmarkRunning ? `AI Speed Test running — ${benchmarkCompleted}/${benchmarkTotal}` : `Run AI Latency benchmark on ${modelsCount} visible models`}
         >
           <IconPlayerPlay size={14} stroke={1.5} />
           {benchmarkRunning ? (
             <span className={styles.benchmarkRunning}>
               <span className={styles.spinner} />
-              AI Latency Test…
+              RUN {benchmarkCompleted}/{benchmarkTotal}
             </span>
           ) : (
             <span>AI Latency</span>

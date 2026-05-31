@@ -13,7 +13,6 @@ import { useTheme } from './hooks/useTheme.js'
 import Header from './components/layout/Header.jsx'
 import Sidebar from './components/layout/Sidebar.jsx'
 import Footer from './components/layout/Footer.jsx'
-import StatsBar from './components/dashboard/StatsBar.jsx'
 import FilterBar from './components/dashboard/FilterBar.jsx'
 import ModelTable from './components/dashboard/ModelTable.jsx'
 import DetailPanel from './components/dashboard/DetailPanel.jsx'
@@ -26,13 +25,12 @@ import ToastContainer from './components/atoms/ToastContainer.jsx'
 let toastIdCounter = 0
 
 export default function App() {
-  const { models, connected, nextPingAt, isPinging, pingMode, globalBenchmarkRunning, globalBenchmarkTotal, globalBenchmarkCompleted } = useSocket('http://localhost:3333')
+  const { models, connected, nextPingAt, isPinging, pingMode, globalBenchmarkRunning, globalBenchmarkTotal, globalBenchmarkCompleted } = useSocket()
   const { theme, toggle: toggleTheme } = useTheme()
   const [currentView, setCurrentView] = useState('dashboard')
   const [selectedModel, setSelectedModel] = useState(null)
   const [exportOpen, setExportOpen] = useState(false)
   const [toasts, setToasts] = useState([])
-  const [localPingMode, setLocalPingMode] = useState('speed')
 
   const {
     filtered,
@@ -59,11 +57,19 @@ export default function App() {
       return
     }
     try {
-      await fetch('http://localhost:3333/api/global-benchmark', { method: 'POST' })
+      await fetch('/api/global-benchmark', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        // 📖 Match the user's current table, not the hidden catalog. If filters/search
+        // 📖 hide a model, the benchmark intentionally skips it.
+        body: JSON.stringify({
+          models: filtered.map((model) => ({ providerKey: model.providerKey, modelId: model.modelId })),
+        }),
+      })
     } catch (err) {
       console.error('[Benchmark] Failed to start global benchmark:', err.message)
     }
-  }, [globalBenchmarkRunning])
+  }, [filtered, globalBenchmarkRunning])
 
   const addToast = useCallback((message, type = 'info') => {
     const id = ++toastIdCounter
@@ -82,9 +88,8 @@ export default function App() {
 
   // ── Ping mode: sync with backend ──
   const handlePingModeChange = useCallback(async (mode) => {
-    setLocalPingMode(mode)
     try {
-      await fetch(`http://localhost:3333/api/ping-mode?action=${mode}`, { method: 'POST' })
+      await fetch(`/api/ping-mode?action=${mode}`, { method: 'POST' })
     } catch {}
   }, [])
 
@@ -123,10 +128,11 @@ export default function App() {
               onOpenExport={() => setExportOpen(true)}
               onBenchmark={handleBenchmark}
               benchmarkRunning={globalBenchmarkRunning}
-              modelsCount={models.length}
+              benchmarkTotal={globalBenchmarkTotal}
+              benchmarkCompleted={globalBenchmarkCompleted}
+              modelsCount={filtered.length}
               theme={theme}
             />
-            <StatsBar models={models} />
             <FilterBar
               filterTier={filterTier}
               setFilterTier={setFilterTier}
@@ -135,10 +141,13 @@ export default function App() {
               filterProvider={filterProvider}
               setFilterProvider={setFilterProvider}
               providers={providers}
-              pingMode={localPingMode}
+              pingMode={pingMode}
               setPingMode={handlePingModeChange}
               nextPingAt={nextPingAt}
               isPinging={isPinging}
+              globalBenchmarkRunning={globalBenchmarkRunning}
+              globalBenchmarkTotal={globalBenchmarkTotal}
+              globalBenchmarkCompleted={globalBenchmarkCompleted}
             />
             <ModelTable
               filtered={filtered}
@@ -146,9 +155,6 @@ export default function App() {
               sortColumn={sortColumn}
               sortDirection={sortDirection}
               onSort={toggleSort}
-              globalBenchmarkRunning={globalBenchmarkRunning}
-              globalBenchmarkTotal={globalBenchmarkTotal}
-              globalBenchmarkCompleted={globalBenchmarkCompleted}
             />
           </div>
         )}

@@ -145,7 +145,15 @@ docker run -p 19280:19280 ghcr.io/vava-nessa/free-coding-models:latest
 docker run -p 19280:19280 -e OPENROUTER_API_KEY=your_key ghcr.io/vava-nessa/free-coding-models:latest
 ```
 
-Access the web dashboard at `http://localhost:19280/` and configure your coding tool to use `http://localhost:19280/v1` with model `fcm`.
+Access the daemon web dashboard at `http://localhost:19280/` and configure your coding tool to use `http://localhost:19280/v1` with model `fcm`.
+
+For the full TUI-style catalog dashboard from an npm install, run:
+
+```bash
+free-coding-models web
+```
+
+This starts the realtime Web Dashboard locally, opens it in your browser, and uses `http://localhost:3333/` by default. Override the port with `FCM_WEB_PORT=3334 free-coding-models web`.
 
 ### Available Image Tags
 

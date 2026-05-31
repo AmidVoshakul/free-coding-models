@@ -1,21 +1,24 @@
 /**
  * @file web/server.js
- * @description HTTP server for the free-coding-models Web Dashboard V2.
+ * @description HTTP + Socket.IO/SSE server for the free-coding-models realtime Web Dashboard.
  *
- * Reuses the existing ping engine, model sources, and utility functions
- * from the CLI tool. Serves the dashboard HTML/CSS/JS and provides
- * API endpoints + SSE for real-time ping data.
+ * @details
+ *   📖 This server intentionally mirrors the TUI health loop instead of exposing a
+ *   slow request/response snapshot. The browser gets per-model ping state, frequent
+ *   updates while probes complete, and the same startup speed burst → normal → idle
+ *   slow cadence used by the terminal UI.
  *
- * Endpoints:
- *   GET /              → Dashboard HTML
- *   GET /styles.css    → Dashboard styles
- *   GET /app.js        → Dashboard client JS
- *   GET /api/models    → All model metadata (JSON)
- *   GET /api/health    → Lightweight dashboard health probe
- *   GET /api/config    → Current config (sanitized — masked keys)
- *   GET /api/key/:prov → Reveal a provider's full API key
- *   GET /api/events    → SSE stream of live ping results
- *   POST /api/settings → Update API keys / provider toggles
+ *   Realtime transport strategy:
+ *   - Socket.IO is the primary channel for the local web app.
+ *   - `/api/events` keeps an SSE stream alive as a zero-dependency fallback.
+ *   - `/api/models` remains a plain JSON endpoint for polling/fallback clients.
+ *
+ * @functions
+ *   → startWebServer(port, options) — Start the dashboard server and realtime loops
+ *   → inspectExistingWebServer(port) — Detect if a port already hosts this dashboard
+ *   → findAvailablePort(startPort, maxAttempts) — Find a local fallback port
+ *
+ * @exports startWebServer, inspectExistingWebServer, findAvailablePort
  */
 
 import { createServer } from 'node:http'
@@ -30,55 +33,51 @@ import { loadConfig, getApiKey, saveConfig, isProviderEnabled } from '../src/cor
 import { ping } from '../src/core/ping.js'
 import {
   getAvg, getVerdict, getUptime, getP95, getJitter,
-  getStabilityScore, TIER_ORDER
+  getStabilityScore,
 } from '../src/core/utils.js'
-import { benchmarkModel } from '../src/core/benchmark.js'
-
-// 📖 Benchmark constants (mirrors src/core/benchmark.js BENCHMARK_TIMEOUT_MS)
-const BENCHMARK_TIMEOUT_MS = 20_000
-
-// ─── Ping cadence (matches CLI src/tui/tui-state.js) ────────────────────────
-const PING_MODE_INTERVALS = { speed: 2000, normal: 10000, slow: 30000, forced: 4000 }
-const SPEED_MODE_DURATION_MS = 60_000
-const IDLE_SLOW_AFTER_MS = 5 * 60_000
-const PING_MODE_CYCLE = ['speed', 'normal', 'slow', 'forced']
-
-let pingMode = 'speed'
-let speedModeUntil = Date.now() + SPEED_MODE_DURATION_MS
-let lastUserActivity = Date.now()
-let activePingInterval = PING_MODE_INTERVALS.speed
-
-function refreshPingMode() {
-  const now = Date.now()
-  // Speed → normal fallback
-  if (pingMode === 'speed' && now >= speedModeUntil) {
-    pingMode = 'normal'
-    activePingInterval = PING_MODE_INTERVALS.normal
-  }
-  // Idle → slow
-  if (pingMode !== 'slow' && (now - lastUserActivity) >= IDLE_SLOW_AFTER_MS) {
-    pingMode = 'slow'
-    activePingInterval = PING_MODE_INTERVALS.slow
-  }
-}
-
-function noteUserActivity() { lastUserActivity = Date.now() }
-
-function cyclePingMode() {
-  const idx = PING_MODE_CYCLE.indexOf(pingMode)
-  pingMode = PING_MODE_CYCLE[(idx + 1) % PING_MODE_CYCLE.length]
-  activePingInterval = PING_MODE_INTERVALS[pingMode]
-  if (pingMode === 'speed') speedModeUntil = Date.now() + SPEED_MODE_DURATION_MS
-}
+import { benchmarkModel, BENCHMARK_TIMEOUT_MS } from '../src/core/benchmark.js'
+import {
+  PING_MODE_INTERVALS,
+  PING_MODE_CYCLE,
+  SPEED_MODE_DURATION_MS,
+  IDLE_SLOW_AFTER_MS,
+} from '../src/tui/tui-state.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const SERVER_SIGNATURE = 'free-coding-models-web'
+const BROADCAST_THROTTLE_MS = 80
+const MAX_PING_HISTORY = 60
+const GLOBAL_BENCHMARK_CONCURRENCY = 5
+const DEFAULT_WEB_PORT = 3333
+const BODY_LIMIT_BYTES = 1024 * 1024
 
-// ─── State ───────────────────────────────────────────────────────────────────
+// ─── Mutable server state ───────────────────────────────────────────────────
 
 let config = loadConfig()
+let io = null
+let pingLoopTimer = null
+let broadcastTimer = null
+let heartbeatTimer = null
+let startedServer = null
 
-// Build results array from MODELS (same shape as the TUI)
+const sseClients = new Set()
+
+const runtime = {
+  pingMode: 'speed',
+  pingModeSource: 'startup',
+  activePingInterval: PING_MODE_INTERVALS.speed,
+  speedModeUntil: Date.now() + SPEED_MODE_DURATION_MS,
+  lastUserActivityAt: Date.now(),
+  resumeSpeedOnActivity: false,
+  lastPingTime: Date.now(),
+  nextPingAt: Date.now(),
+  pendingPings: 0,
+  pingRound: 0,
+  globalBenchmarkRunning: false,
+  globalBenchmarkTotal: 0,
+  globalBenchmarkCompleted: 0,
+}
+
 const results = MODELS.map(([modelId, label, tier, sweScore, ctx, providerKey], idx) => ({
   idx: idx + 1,
   modelId,
@@ -94,114 +93,203 @@ const results = MODELS.map(([modelId, label, tier, sweScore, ctx, providerKey], 
   url: sources[providerKey]?.url || null,
   cliOnly: sources[providerKey]?.cliOnly || false,
   zenOnly: sources[providerKey]?.zenOnly || false,
+  isPinging: false,
 }))
 
-// ─── Benchmark state ───────────────────────────────────────────────────────────
-const benchmarkRunning = new Set()      // modelIds currently being benchmarked
-const benchmarkResults = new Map()        // modelId → benchmark result object
+const benchmarkRunning = new Set()
+const benchmarkResults = new Map()
 
-// ─── Global benchmark state (Ctrl+U equivalent) ─────────────────────────────────
-let globalBenchmarkRunning = false
-let globalBenchmarkTotal = 0
-let globalBenchmarkCompleted = 0
+// ─── Shared state helpers ───────────────────────────────────────────────────
 
-// ─── Socket.io clients ──────────────────────────────────────────────────────
-let io = null
-
-function broadcastUpdate() {
-  if (!io) return
-  io.emit('models:update', getModelsPayload())
+function benchmarkKey(providerKey, modelId) {
+  return `${providerKey}/${modelId}`
 }
 
-let pingRound = 0
-let pingLoopRunning = false
-let nextPingAt = Date.now() + activePingInterval   // absolute timestamp of next ping
+function getResultKey(result) {
+  return benchmarkKey(result.providerKey, result.modelId)
+}
 
-async function pingAllModels() {
-  if (pingLoopRunning) return
-  pingLoopRunning = true
-  pingRound++
-  const batchSize = 30
-  // P2 fix: honor provider enabled flags — skip disabled providers
-  const modelsToPing = results.filter(r =>
-    !r.cliOnly && r.url && isProviderEnabled(config, r.providerKey)
-  )
+function getResult(providerKey, modelId) {
+  return results.find((r) => r.providerKey === providerKey && r.modelId === modelId) || null
+}
 
-  for (let i = 0; i < modelsToPing.length; i += batchSize) {
-    const batch = modelsToPing.slice(i, i + batchSize)
-    const promises = batch.map(async (r) => {
-      const apiKey = getApiKey(config, r.providerKey)
-      try {
-        const result = await ping(apiKey, r.modelId, r.providerKey, r.url)
-        r.httpCode = result.code
-        if (result.code === '200') {
-          r.status = 'up'
-          r.pings.push({ ms: result.ms, code: result.code })
-        } else if (result.code === '401') {
-          r.status = 'up'
-          r.pings.push({ ms: result.ms, code: result.code })
-        } else if (result.code === '429') {
-          r.status = 'up'
-          r.pings.push({ ms: result.ms, code: result.code })
-        } else if (result.code === '000') {
-          r.status = 'timeout'
-        } else {
-          r.status = 'down'
-          r.pings.push({ ms: result.ms, code: result.code })
-        }
-        // Keep only last 60 pings
-        if (r.pings.length > 60) r.pings = r.pings.slice(-60)
-      } catch {
-        r.status = 'timeout'
-      }
-    })
-    await Promise.all(promises)
+function noteUserActivity() {
+  runtime.lastUserActivityAt = Date.now()
+  if (runtime.pingMode === 'forced') return
+  if (runtime.resumeSpeedOnActivity) setPingMode('speed', 'activity')
+}
+
+function setPingMode(nextMode, source = 'manual') {
+  const mode = PING_MODE_INTERVALS[nextMode] ? nextMode : 'normal'
+  runtime.pingMode = mode
+  runtime.pingModeSource = source
+  runtime.activePingInterval = PING_MODE_INTERVALS[mode]
+  runtime.speedModeUntil = mode === 'speed' ? Date.now() + SPEED_MODE_DURATION_MS : null
+  runtime.resumeSpeedOnActivity = source === 'idle'
+  scheduleNextPing()
+  broadcastUpdate({ immediate: true })
+}
+
+function cyclePingMode() {
+  const idx = PING_MODE_CYCLE.indexOf(runtime.pingMode)
+  setPingMode(PING_MODE_CYCLE[(idx + 1) % PING_MODE_CYCLE.length] || 'normal')
+}
+
+function refreshPingMode() {
+  const now = Date.now()
+  if (runtime.pingMode === 'forced') return
+
+  if (runtime.speedModeUntil && now >= runtime.speedModeUntil) {
+    setPingMode('normal', 'auto')
+    return
   }
 
-  // Broadcast via Socket.IO
+  if (now - runtime.lastUserActivityAt >= IDLE_SLOW_AFTER_MS) {
+    if (runtime.pingMode !== 'slow' || runtime.pingModeSource !== 'idle') {
+      setPingMode('slow', 'idle')
+    } else {
+      runtime.resumeSpeedOnActivity = true
+    }
+  }
+}
+
+function scheduleNextPing() {
+  if (!startedServer?.listening) return
+  clearTimeout(pingLoopTimer)
+  refreshPingMode()
+  const elapsed = Date.now() - runtime.lastPingTime
+  const delay = Math.max(0, runtime.activePingInterval - elapsed)
+  runtime.nextPingAt = Date.now() + delay
+  pingLoopTimer = setTimeout(startPingCycle, delay)
+}
+
+function trimPingHistory(result) {
+  if (result.pings.length > MAX_PING_HISTORY) result.pings = result.pings.slice(-MAX_PING_HISTORY)
+}
+
+function updateHealthFromPing(result, pingResult, hasApiKey) {
+  const code = String(pingResult.code || 'ERR')
+  result.httpCode = code
+
+  // 📖 Match the TUI: every probe contributes to availability history. Average,
+  // 📖 p95, and jitter still ignore non-measurable codes through src/core/utils.js.
+  result.pings.push({ ms: pingResult.ms, code })
+  trimPingHistory(result)
+
+  if (code === '200') result.status = 'up'
+  else if (code === '000') result.status = 'timeout'
+  else if (code === '401' || code === '403') result.status = hasApiKey ? 'auth_error' : 'noauth'
+  else result.status = 'down'
+}
+
+function updateHealthFromBenchmark(result, benchmarkResult) {
+  if (!result || !benchmarkResult) return
+  if (benchmarkResult.ok) {
+    result.status = 'up'
+    result.httpCode = '200'
+    return
+  }
+
+  const code = String(benchmarkResult.code || 'ERR')
+  if (code === 'TIMEOUT') result.status = 'timeout'
+  else if (code === '401' || code === '403') result.status = getApiKey(config, result.providerKey) ? 'auth_error' : 'noauth'
+  else if (code !== 'ERR' && code !== 'UNSUPPORTED') result.status = 'down'
+  result.httpCode = code
+}
+
+async function pingModel(result) {
+  if (!result || result.isPinging || result.cliOnly || !result.url || !isProviderEnabled(config, result.providerKey)) return
+
+  result.isPinging = true
+  runtime.pendingPings += 1
   broadcastUpdate()
-  pingLoopRunning = false
+
+  const apiKey = getApiKey(config, result.providerKey) ?? null
+  try {
+    const pingResult = await ping(apiKey, result.modelId, result.providerKey, result.url)
+    updateHealthFromPing(result, pingResult, !!apiKey)
+  } catch (err) {
+    updateHealthFromPing(result, { code: '000', ms: null, error: err?.message || 'Ping failed' }, !!apiKey)
+  } finally {
+    result.isPinging = false
+    runtime.pendingPings = Math.max(0, runtime.pendingPings - 1)
+    broadcastUpdate()
+  }
+}
+
+function startPingCycle() {
+  if (!startedServer?.listening) return
+  refreshPingMode()
+
+  runtime.lastPingTime = Date.now()
+  runtime.pingRound += 1
+  runtime.nextPingAt = runtime.lastPingTime + runtime.activePingInterval
+
+  const modelsToPing = results.filter((r) => !r.cliOnly && r.url && isProviderEnabled(config, r.providerKey))
+  for (const result of modelsToPing) {
+    void pingModel(result)
+  }
+
+  broadcastUpdate({ immediate: true })
+  scheduleNextPing()
+}
+
+function serializeModel(result) {
+  const key = getResultKey(result)
+  const avg = getAvg(result)
+  const p95 = getP95(result)
+  const jitter = getJitter(result)
+  const stability = getStabilityScore(result)
+  const latest = result.pings.length > 0 ? result.pings[result.pings.length - 1] : null
+
+  return {
+    idx: result.idx,
+    modelId: result.modelId,
+    label: result.label,
+    tier: result.tier,
+    sweScore: result.sweScore,
+    ctx: result.ctx,
+    providerKey: result.providerKey,
+    origin: result.origin,
+    status: result.status,
+    httpCode: result.httpCode,
+    cliOnly: result.cliOnly,
+    zenOnly: result.zenOnly,
+    isPinging: result.isPinging,
+    avg: Number.isFinite(avg) ? avg : null,
+    verdict: getVerdict(result),
+    uptime: getUptime(result),
+    p95: Number.isFinite(p95) ? p95 : null,
+    jitter: Number.isFinite(jitter) ? jitter : null,
+    stability,
+    latestPing: latest?.ms ?? null,
+    latestCode: latest?.code ?? null,
+    pingHistory: result.pings.slice(-20).map((p) => ({ ms: p.ms, code: p.code })),
+    pingCount: result.pings.length,
+    hasApiKey: !!getApiKey(config, result.providerKey),
+    benchmarkKey: key,
+    isBenchmarking: benchmarkRunning.has(key),
+    benchmark: benchmarkResults.get(key) || null,
+  }
 }
 
 function getModelsPayload() {
   return {
-    pingMode,
-    nextPingAt,
-    isPinging: pingLoopRunning,
-    globalBenchmarkRunning,
-    globalBenchmarkTotal,
-    globalBenchmarkCompleted,
-    models: results.map(r => ({
-    idx: r.idx,
-    modelId: r.modelId,
-    label: r.label,
-    tier: r.tier,
-    sweScore: r.sweScore,
-    ctx: r.ctx,
-    providerKey: r.providerKey,
-    origin: r.origin,
-    status: r.status,
-    httpCode: r.httpCode,
-    cliOnly: r.cliOnly,
-    zenOnly: r.zenOnly,
-    avg: getAvg(r),
-    verdict: getVerdict(r),
-    uptime: getUptime(r),
-    p95: getP95(r),
-    jitter: getJitter(r),
-    stability: getStabilityScore(r),
-    latestPing: r.pings.length > 0 ? r.pings[r.pings.length - 1].ms : null,
-    latestCode: r.pings.length > 0 ? r.pings[r.pings.length - 1].code : null,
-    pingHistory: r.pings.slice(-20).map(p => ({ ms: p.ms, code: p.code })),
-    pingCount: r.pings.length,
-    hasApiKey: !!getApiKey(config, r.providerKey),
-    isBenchmarking: benchmarkRunning.has(r.modelId),
-    benchmark: benchmarkResults.get(r.modelId) || null,
-  }))}   // ← closes models array + wrapper object
+    pingMode: runtime.pingMode,
+    pingModeSource: runtime.pingModeSource,
+    pingInterval: runtime.activePingInterval,
+    nextPingAt: runtime.nextPingAt,
+    pendingPings: runtime.pendingPings,
+    isPinging: runtime.pendingPings > 0,
+    pingRound: runtime.pingRound,
+    globalBenchmarkRunning: runtime.globalBenchmarkRunning,
+    globalBenchmarkTotal: runtime.globalBenchmarkTotal,
+    globalBenchmarkCompleted: runtime.globalBenchmarkCompleted,
+    models: results.map(serializeModel),
+  }
 }
 
 function getConfigPayload() {
-  // Sanitize — show which providers have keys, but not the actual keys
   const providers = {}
   for (const [key, src] of Object.entries(sources)) {
     const rawKey = getApiKey(config, key)
@@ -223,7 +311,36 @@ function maskApiKey(key) {
   return '••••••••' + key.slice(-4)
 }
 
-// ─── HTTP Server ─────────────────────────────────────────────────────────────
+function writeSsePayload(res, payload) {
+  try {
+    res.write(`data: ${JSON.stringify(payload)}\n\n`)
+  } catch {
+    sseClients.delete(res)
+  }
+}
+
+function broadcastNow() {
+  const payload = getModelsPayload()
+  if (io) io.emit('models:update', payload)
+  for (const res of [...sseClients]) writeSsePayload(res, payload)
+}
+
+function broadcastUpdate({ immediate = false } = {}) {
+  if (immediate) {
+    clearTimeout(broadcastTimer)
+    broadcastTimer = null
+    broadcastNow()
+    return
+  }
+
+  if (broadcastTimer) return
+  broadcastTimer = setTimeout(() => {
+    broadcastTimer = null
+    broadcastNow()
+  }, BROADCAST_THROTTLE_MS)
+}
+
+// ─── HTTP helpers ───────────────────────────────────────────────────────────
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -256,7 +373,10 @@ function serveDistFile(res, pathname) {
   const ct = MIME_TYPES[ext] || 'application/octet-stream'
   try {
     const content = readFileSync(filePath)
-    res.writeHead(200, { 'Content-Type': ct, 'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=31536000, immutable' })
+    res.writeHead(200, {
+      'Content-Type': ct,
+      'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=31536000, immutable',
+    })
     res.end(content)
   } catch {
     res.writeHead(404)
@@ -264,10 +384,112 @@ function serveDistFile(res, pathname) {
   }
 }
 
-function handleRequest(req, res) {
-  res.setHeader('X-FCM-Server', SERVER_SIGNATURE)
+function sendJson(res, status, payload) {
+  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' })
+  res.end(JSON.stringify(payload))
+}
 
-  // CORS for local dev
+function readJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    let body = ''
+    req.on('data', (chunk) => {
+      body += chunk
+      if (body.length > BODY_LIMIT_BYTES) {
+        reject(new Error('Request body too large'))
+        req.destroy()
+      }
+    })
+    req.on('end', () => {
+      if (!body.trim()) {
+        resolve({})
+        return
+      }
+      try { resolve(JSON.parse(body)) }
+      catch (err) { reject(err) }
+    })
+    req.on('error', reject)
+  })
+}
+
+function parseVisibleBenchmarkModels(body) {
+  const rawModels = Array.isArray(body?.models) ? body.models : null
+  if (!rawModels) return results.filter((r) => !r.cliOnly && r.url)
+
+  const unique = new Map()
+  for (const item of rawModels) {
+    if (!item || typeof item !== 'object') continue
+    const providerKey = typeof item.providerKey === 'string' ? item.providerKey : ''
+    const modelId = typeof item.modelId === 'string' ? item.modelId : ''
+    const result = getResult(providerKey, modelId)
+    if (result && !result.cliOnly && result.url) unique.set(getResultKey(result), result)
+  }
+  return [...unique.values()]
+}
+
+async function runSingleBenchmark(result) {
+  const key = getResultKey(result)
+  if (benchmarkRunning.has(key)) return { skipped: true }
+
+  benchmarkRunning.add(key)
+  broadcastUpdate({ immediate: true })
+  try {
+    const benchmarkResult = await benchmarkModel({
+      apiKey: getApiKey(config, result.providerKey) ?? null,
+      modelId: result.modelId,
+      providerKey: result.providerKey,
+      url: result.url,
+      timeoutMs: BENCHMARK_TIMEOUT_MS,
+    })
+    benchmarkResults.set(key, benchmarkResult)
+    updateHealthFromBenchmark(result, benchmarkResult)
+    return benchmarkResult
+  } catch (err) {
+    const fallback = {
+      ok: false,
+      code: 'ERR',
+      totalMs: 0,
+      error: err?.message || 'Benchmark failed',
+      retries: 0,
+    }
+    benchmarkResults.set(key, fallback)
+    updateHealthFromBenchmark(result, fallback)
+    return fallback
+  } finally {
+    benchmarkRunning.delete(key)
+    broadcastUpdate({ immediate: true })
+  }
+}
+
+function runWithConcurrency(tasks, concurrency) {
+  return new Promise((resolve) => {
+    const resultsOut = new Array(tasks.length)
+    let nextIndex = 0
+    let active = 0
+    let completed = 0
+
+    function startNext() {
+      while (active < concurrency && nextIndex < tasks.length) {
+        const index = nextIndex++
+        active += 1
+        Promise.resolve(tasks[index]())
+          .then((value) => { resultsOut[index] = value })
+          .catch((err) => { resultsOut[index] = { error: err } })
+          .finally(() => {
+            active -= 1
+            completed += 1
+            if (completed >= tasks.length) resolve(resultsOut)
+            else startNext()
+          })
+      }
+      if (tasks.length === 0) resolve(resultsOut)
+    }
+
+    startNext()
+  })
+}
+
+async function handleRequest(req, res) {
+  res.setHeader('X-FCM-Server', SERVER_SIGNATURE)
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
@@ -278,291 +500,214 @@ function handleRequest(req, res) {
     return
   }
 
-  const url = new URL(req.url, `http://${req.headers.host}`)
+  const url = new URL(req.url, `http://${req.headers.host || `localhost:${DEFAULT_WEB_PORT}`}`)
 
-  // ─── API: Reveal full key for a provider ───
   const keyMatch = url.pathname.match(/^\/api\/key\/(.+)$/)
   if (keyMatch) {
     const providerKey = decodeURIComponent(keyMatch[1])
-    const rawKey = getApiKey(config, providerKey)
-    res.writeHead(200, { 'Content-Type': 'application/json' })
-    res.end(JSON.stringify({ key: rawKey || null }))
+    if (!sources[providerKey]) {
+      sendJson(res, 404, { error: 'Unknown provider' })
+      return
+    }
+    sendJson(res, 200, { key: getApiKey(config, providerKey) || null })
     return
   }
 
-  switch (url.pathname) {
-    case '/':
-      serveDistFile(res, '/')
-      break
+  try {
+    switch (url.pathname) {
+      case '/':
+        serveDistFile(res, '/')
+        return
 
-    case '/styles.css':
-    case '/app.js':
-      serveDistFile(res, url.pathname)
-      break
+      case '/styles.css':
+      case '/app.js':
+        serveDistFile(res, url.pathname)
+        return
 
-    case '/api/ping-mode':
-      {
-        const url = new URL(req.url, `http://${req.headers.host}`)
+      case '/api/activity':
+        if (req.method !== 'POST') {
+          res.writeHead(405)
+          res.end('Method Not Allowed')
+          return
+        }
+        noteUserActivity()
+        sendJson(res, 200, { ok: true, pingMode: runtime.pingMode })
+        return
+
+      case '/api/ping-mode': {
+        if (req.method !== 'POST' && req.method !== 'GET') {
+          res.writeHead(405)
+          res.end('Method Not Allowed')
+          return
+        }
+        noteUserActivity()
         const action = url.searchParams.get('action')
         if (action === 'cycle') cyclePingMode()
-        else if (action === 'speed') { pingMode = 'speed'; speedModeUntil = Date.now() + SPEED_MODE_DURATION_MS; activePingInterval = PING_MODE_INTERVALS.speed }
-        else if (action === 'normal') { pingMode = 'normal'; activePingInterval = PING_MODE_INTERVALS.normal }
-        else if (action === 'slow') { pingMode = 'slow'; activePingInterval = PING_MODE_INTERVALS.slow }
-        res.writeHead(200, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({ pingMode, interval: activePingInterval, nextPingAt }))
-      }
-      break
-
-    case '/api/ping-timer':
-      res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({ nextPingAt, isPinging: pingLoopRunning }))
-      break
-
-    default:
-      if (url.pathname.startsWith('/assets/') || url.pathname.endsWith('.js') || url.pathname.endsWith('.css')) {
-        serveDistFile(res, url.pathname)
-        break
+        else if (PING_MODE_INTERVALS[action]) setPingMode(action, 'manual')
+        sendJson(res, 200, {
+          pingMode: runtime.pingMode,
+          pingModeSource: runtime.pingModeSource,
+          interval: runtime.activePingInterval,
+          nextPingAt: runtime.nextPingAt,
+        })
+        return
       }
 
-      if (!url.pathname.startsWith('/api/')) {
+      case '/api/ping-timer':
+        sendJson(res, 200, {
+          nextPingAt: runtime.nextPingAt,
+          isPinging: runtime.pendingPings > 0,
+          pendingPings: runtime.pendingPings,
+        })
+        return
+
+      case '/api/models':
+        // 📖 Legacy REST contract: keep returning the flat model array.
+        sendJson(res, 200, getModelsPayload().models)
+        return
+
+      case '/api/state':
+        sendJson(res, 200, getModelsPayload())
+        return
+
+      case '/api/health':
+        sendJson(res, 200, { ok: true, app: SERVER_SIGNATURE })
+        return
+
+      case '/api/config':
+        sendJson(res, 200, getConfigPayload())
+        return
+
+      case '/api/events':
+        res.writeHead(200, {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          Connection: 'keep-alive',
+        })
+        writeSsePayload(res, getModelsPayload())
+        sseClients.add(res)
+        req.on('close', () => sseClients.delete(res))
+        return
+
+      case '/api/settings': {
+        if (req.method !== 'POST') {
+          res.writeHead(405)
+          res.end('Method Not Allowed')
+          return
+        }
+        const settings = await readJsonBody(req)
+        noteUserActivity()
+        if (settings.apiKeys) {
+          if (!config.apiKeys) config.apiKeys = {}
+          for (const [key, value] of Object.entries(settings.apiKeys)) {
+            if (value) config.apiKeys[key] = value
+            else delete config.apiKeys[key]
+          }
+        }
+        if (settings.providers) {
+          if (!config.providers) config.providers = {}
+          for (const [key, value] of Object.entries(settings.providers)) {
+            if (!config.providers[key]) config.providers[key] = {}
+            config.providers[key].enabled = value?.enabled !== false
+          }
+        }
+        saveConfig(config)
+        broadcastUpdate({ immediate: true })
+        sendJson(res, 200, { success: true })
+        return
+      }
+
+      case '/api/benchmark': {
+        if (req.method !== 'POST') {
+          res.writeHead(405)
+          res.end('Method Not Allowed')
+          return
+        }
+        const body = await readJsonBody(req)
+        const result = getResult(body.providerKey, body.modelId)
+        if (!result) {
+          sendJson(res, 404, { error: 'Model not found' })
+          return
+        }
+        const key = getResultKey(result)
+        if (benchmarkRunning.has(key)) {
+          sendJson(res, 409, { error: 'Benchmark already in progress for this model' })
+          return
+        }
+        noteUserActivity()
+        const benchmarkResult = await runSingleBenchmark(result)
+        sendJson(res, 200, benchmarkResult)
+        return
+      }
+
+      case '/api/global-benchmark': {
+        if (req.method === 'GET') {
+          sendJson(res, 200, {
+            running: runtime.globalBenchmarkRunning,
+            total: runtime.globalBenchmarkTotal,
+            completed: runtime.globalBenchmarkCompleted,
+          })
+          return
+        }
+        if (req.method !== 'POST') {
+          res.writeHead(405)
+          res.end('Method Not Allowed')
+          return
+        }
+        if (runtime.globalBenchmarkRunning) {
+          sendJson(res, 409, { error: 'Global benchmark already running' })
+          return
+        }
+
+        const body = await readJsonBody(req)
+        noteUserActivity()
+        const healthPriority = { up: 0, pending: 1, timeout: 2, noauth: 3, auth_error: 4, down: 5 }
+        const modelsToBenchmark = parseVisibleBenchmarkModels(body)
+          .sort((a, b) => {
+            const hpA = healthPriority[a.status] ?? 6
+            const hpB = healthPriority[b.status] ?? 6
+            if (hpA !== hpB) return hpA - hpB
+            const pingA = typeof a.pings?.[a.pings.length - 1]?.ms === 'number' ? a.pings[a.pings.length - 1].ms : 99999
+            const pingB = typeof b.pings?.[b.pings.length - 1]?.ms === 'number' ? b.pings[b.pings.length - 1].ms : 99999
+            return pingA - pingB
+          })
+
+        runtime.globalBenchmarkRunning = true
+        runtime.globalBenchmarkTotal = modelsToBenchmark.length
+        runtime.globalBenchmarkCompleted = 0
+        broadcastUpdate({ immediate: true })
+
+        const tasks = modelsToBenchmark.map((model) => async () => {
+          try {
+            return await runSingleBenchmark(model)
+          } finally {
+            runtime.globalBenchmarkCompleted += 1
+            broadcastUpdate({ immediate: true })
+          }
+        })
+
+        void runWithConcurrency(tasks, GLOBAL_BENCHMARK_CONCURRENCY).finally(() => {
+          runtime.globalBenchmarkRunning = false
+          runtime.globalBenchmarkTotal = 0
+          runtime.globalBenchmarkCompleted = 0
+          broadcastUpdate({ immediate: true })
+        })
+
+        sendJson(res, 202, { started: true, total: modelsToBenchmark.length })
+        return
+      }
+
+      default:
+        if (url.pathname.startsWith('/assets/') || url.pathname.endsWith('.js') || url.pathname.endsWith('.css')) {
+          serveDistFile(res, url.pathname)
+          return
+        }
         res.writeHead(404)
         res.end('Not Found')
-        break
-      }
-
-    case '/api/models':
-      // Flat array for REST clients (legacy)
-      res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify(getModelsPayload().models))
-      break
-
-    case '/api/health':
-      res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({ ok: true, app: SERVER_SIGNATURE }))
-      break
-
-    case '/api/config':
-      res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify(getConfigPayload()))
-      break
-
-    case '/api/events':
-      // SSE kept for /api/events (backward compat)
-      res.writeHead(200, {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-      })
-      res.write(`data: ${JSON.stringify(getModelsPayload())}\n\n`)
-      res.on('close', () => {})
-      break
-
-    case '/api/settings':
-      if (req.method === 'POST') {
-        let body = ''
-        req.on('data', chunk => body += chunk)
-        req.on('end', () => {
-          try {
-            const settings = JSON.parse(body)
-            if (settings.apiKeys) {
-              for (const [key, value] of Object.entries(settings.apiKeys)) {
-                if (value) config.apiKeys[key] = value
-                else delete config.apiKeys[key]
-              }
-            }
-            if (settings.providers) {
-              for (const [key, value] of Object.entries(settings.providers)) {
-                if (!config.providers[key]) config.providers[key] = {}
-                config.providers[key].enabled = value.enabled !== false
-              }
-            }
-            // P2 fix: catch saveConfig failures and report to client
-            try {
-              // Save config → activity
-            noteUserActivity()
-            saveConfig(config)
-            } catch (saveErr) {
-              res.writeHead(500, { 'Content-Type': 'application/json' })
-              res.end(JSON.stringify({ success: false, error: 'Failed to save config: ' + saveErr.message }))
-              return
-            }
-            res.writeHead(200, { 'Content-Type': 'application/json' })
-            res.end(JSON.stringify({ success: true }))
-          } catch (err) {
-            res.writeHead(400, { 'Content-Type': 'application/json' })
-            res.end(JSON.stringify({ error: err.message }))
-          }
-        })
-      } else {
-        res.writeHead(405)
-        res.end('Method Not Allowed')
-      }
-      break
-
-    // ─── Benchmark a single model ───
-    case '/api/benchmark':
-      if (req.method === 'POST') {
-        let body = ''
-        req.on('data', chunk => body += chunk)
-        req.on('end', async () => {
-          try {
-            const { modelId, providerKey } = JSON.parse(body)
-            const model = results.find(r => r.modelId === modelId && r.providerKey === providerKey)
-            if (!model) {
-              res.writeHead(404, { 'Content-Type': 'application/json' })
-              res.end(JSON.stringify({ error: 'Model not found' }))
-              return
-            }
-            if (benchmarkRunning.has(modelId)) {
-              res.writeHead(409, { 'Content-Type': 'application/json' })
-              res.end(JSON.stringify({ error: 'Benchmark already in progress for this model' }))
-              return
-            }
-            const apiKey = getApiKey(config, providerKey)
-            benchmarkRunning.add(modelId)
-            // Broadcast running state
-            broadcastUpdate()
-            try {
-              const result = await benchmarkModel({
-                apiKey,
-                modelId,
-                providerKey,
-                url: model.url,
-                timeoutMs: BENCHMARK_TIMEOUT_MS,
-              })
-              benchmarkResults.set(modelId, result)
-              broadcastUpdate()
-              res.writeHead(200, { 'Content-Type': 'application/json' })
-              res.end(JSON.stringify(result))
-            } finally {
-              benchmarkRunning.delete(modelId)
-              broadcastUpdate()
-            }
-          } catch (err) {
-            res.writeHead(400, { 'Content-Type': 'application/json' })
-            res.end(JSON.stringify({ error: err.message }))
-          }
-        })
-      } else {
-        res.writeHead(405)
-        res.end('Method Not Allowed')
-      }
-      break
-
-    // ─── Global AI Speed Benchmark (Ctrl+U equivalent) ───
-    case '/api/global-benchmark':
-      {
-        // GET → return current status
-        if (req.method === 'GET') {
-          res.writeHead(200, { 'Content-Type': 'application/json' })
-          res.end(JSON.stringify({
-            running: globalBenchmarkRunning,
-            total: globalBenchmarkTotal,
-            completed: globalBenchmarkCompleted,
-          }))
-          break
-        }
-        // POST → start global benchmark
-        if (req.method === 'POST') {
-          if (globalBenchmarkRunning) {
-            res.writeHead(409, { 'Content-Type': 'application/json' })
-            res.end(JSON.stringify({ error: 'Global benchmark already running' }))
-            break
-          }
-          // Use health priority to sort: up first (fast), timeout/down last (slow)
-          const healthPriority = { up: 0, pending: 1, timeout: 2, noauth: 3, auth_error: 4, down: 5 }
-          const modelsToBenchmark = [...results]
-            .filter(r => !r.cliOnly && r.url)
-            .sort((a, b) => {
-              const hpA = healthPriority[a.status] ?? 6
-              const hpB = healthPriority[b.status] ?? 6
-              if (hpA !== hpB) return hpA - hpB
-              const pingA = typeof a.pings?.[a.pings.length - 1]?.ms === 'number' ? a.pings[a.pings.length - 1].ms : 99999
-              const pingB = typeof b.pings?.[b.pings.length - 1]?.ms === 'number' ? b.pings[b.pings.length - 1].ms : 99999
-              return pingA - pingB
-            })
-
-          globalBenchmarkRunning = true
-          globalBenchmarkTotal = modelsToBenchmark.length
-          globalBenchmarkCompleted = 0
-          broadcastUpdate()
-
-          const tasks = modelsToBenchmark.map(model => async () => {
-            const benchmarkKey = `${model.providerKey}/${model.modelId}`
-            if (benchmarkRunning.has(benchmarkKey)) {
-              globalBenchmarkCompleted++
-              broadcastUpdate()
-              return { skipped: true }
-            }
-            const apiKey = getApiKey(config, model.providerKey)
-            benchmarkRunning.add(benchmarkKey)
-            try {
-              const result = await benchmarkModel({
-                apiKey,
-                modelId: model.modelId,
-                providerKey: model.providerKey,
-                url: model.url,
-                timeoutMs: BENCHMARK_TIMEOUT_MS,
-              })
-              benchmarkResults.set(benchmarkKey, result)
-            } catch (err) {
-              benchmarkResults.set(benchmarkKey, {
-                ok: false,
-                code: 'ERR',
-                totalMs: 0,
-                error: err?.message || 'Benchmark failed',
-              })
-            } finally {
-              benchmarkRunning.delete(benchmarkKey)
-              globalBenchmarkCompleted++
-              broadcastUpdate()
-            }
-          })
-
-          // Run with concurrency=5 (same as TUI)
-          runWithConcurrency(tasks, 5).then(() => {
-            globalBenchmarkRunning = false
-            globalBenchmarkTotal = 0
-            globalBenchmarkCompleted = 0
-            broadcastUpdate()
-          })
-
-          res.writeHead(202, { 'Content-Type': 'application/json' })
-          res.end(JSON.stringify({ started: true, total: globalBenchmarkTotal }))
-          break
-        }
-
-        res.writeHead(405)
-        res.end('Method Not Allowed')
-        break
-      }
-  }
-}
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function runWithConcurrency(tasks, concurrency) {
-  return new Promise((resolve) => {
-    let index = 0
-    let active = 0
-    let completed = 0
-    const total = tasks.length
-
-    function startNext() {
-      if (index >= total) return
-      const task = tasks[index++]
-      active++
-      task().then(() => {
-        active--
-        completed++
-        if (completed === total) resolve()
-        else startNext()
-      })
-      if (active < concurrency && index < total) startNext()
     }
-
-    for (let i = 0; i < Math.min(concurrency, total); i++) startNext()
-  })
+  } catch (err) {
+    if (!res.writableEnded) sendJson(res, 500, { error: err?.message || 'Internal server error' })
+  }
 }
 
 function checkPortInUse(port) {
@@ -582,8 +727,6 @@ export async function inspectExistingWebServer(port) {
   const timeout = setTimeout(() => controller.abort(), 750)
 
   try {
-    // 📖 Probe a tiny health route so we only reuse a port when the running
-    // 📖 process is actually the free-coding-models dashboard, not any random app.
     const response = await fetch(`http://127.0.0.1:${port}/api/health`, {
       signal: controller.signal,
       headers: { Accept: 'application/json' },
@@ -617,16 +760,13 @@ function openBrowser(url) {
   })
 }
 
-// ─── Exports ─────────────────────────────────────────────────────────────────
-
-export async function startWebServer(port = 3333, { open = true, startPingLoop = true } = {}) {
+export async function startWebServer(port = DEFAULT_WEB_PORT, { open = true, startPingLoop = true } = {}) {
   const portStatus = await inspectExistingWebServer(port)
 
   if (portStatus.inUse && portStatus.isFcm) {
     const url = `http://localhost:${port}`
-
     console.log()
-    console.log(`  ⚡ free-coding-models Web Dashboard already running`)
+    console.log('  ⚡ free-coding-models Web Dashboard already running')
     console.log(`  🌐 ${url}`)
     console.log()
     if (open) openBrowser(url)
@@ -643,48 +783,56 @@ export async function startWebServer(port = 3333, { open = true, startPingLoop =
   }
 
   const url = `http://localhost:${resolvedPort}`
+  const server = createServer((req, res) => void handleRequest(req, res))
+  startedServer = server
 
-  const server = createServer(handleRequest)
-
-  // Attach Socket.IO to the HTTP server
   io = new Server(server, {
-    cors: {
-      origin: '*',
-      methods: ['GET', 'POST'],
-    },
+    cors: { origin: '*', methods: ['GET', 'POST'] },
     transports: ['websocket', 'polling'],
   })
+
   io.on('connection', (socket) => {
-    // Send initial data immediately on connect
+    noteUserActivity()
     socket.emit('models:update', getModelsPayload())
+    socket.on('client:activity', () => noteUserActivity())
+    socket.on('models:refresh', () => socket.emit('models:update', getModelsPayload()))
   })
-  let pingLoopTimer = null
 
   server.listen(resolvedPort, () => {
     console.log()
-    console.log(`  ⚡ free-coding-models Web Dashboard`)
+    console.log('  ⚡ free-coding-models Web Dashboard')
     console.log(`  🌐 ${url}`)
-    console.log(`  📊 Monitoring ${results.filter(r => !r.cliOnly).length} models across ${Object.keys(sources).length} providers`)
+    console.log(`  📊 Monitoring ${results.filter((r) => !r.cliOnly).length} models across ${Object.keys(sources).length} providers`)
     console.log()
-    console.log(`  Press Ctrl+C to stop`)
+    console.log('  Press Ctrl+C to stop')
     console.log()
+    if (startPingLoop && !pingLoopTimer) {
+      runtime.lastPingTime = Date.now()
+      runtime.nextPingAt = runtime.lastPingTime + runtime.activePingInterval
+      startPingCycle()
+    }
     if (open) openBrowser(url)
   })
 
-  async function schedulePingLoop() {
-    if (!server.listening) return
-    refreshPingMode()
-    noteUserActivity()
-    // Set nextPingAt BEFORE the ping so the UI sees the deadline immediately
-    nextPingAt = Date.now() + activePingInterval
-    await pingAllModels()
-    pingLoopTimer = setTimeout(schedulePingLoop, activePingInterval)
-  }
-
-  if (startPingLoop) schedulePingLoop()
   server.on('close', () => {
-    if (pingLoopTimer) clearTimeout(pingLoopTimer)
+    clearTimeout(pingLoopTimer)
+    clearTimeout(broadcastTimer)
+    clearInterval(heartbeatTimer)
+    for (const res of [...sseClients]) {
+      try { res.end() } catch {}
+    }
+    sseClients.clear()
+    io?.close()
+    io = null
+    if (startedServer === server) startedServer = null
   })
+
+  heartbeatTimer = setInterval(() => {
+    refreshPingMode()
+    for (const res of [...sseClients]) {
+      try { res.write(': heartbeat\n\n') } catch { sseClients.delete(res) }
+    }
+  }, 15_000)
 
   return server
 }

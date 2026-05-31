@@ -36,6 +36,7 @@ const ANALYSIS_FLAGS = [
 ]
 
 const CONFIG_FLAGS = [
+  { flag: 'web | --web | --gui', description: 'Start the full-catalog realtime Web Dashboard' },
   { flag: '--daemon', description: 'Start the FCM Router daemon + web dashboard (same port)' },
   { flag: '--daemon-bg', description: 'Start the FCM Router daemon in the background' },
   { flag: '--daemon-status', description: 'Print FCM Router daemon status JSON' },
@@ -47,6 +48,7 @@ const CONFIG_FLAGS = [
 
 const EXAMPLES = [
   'free-coding-models --help',
+  'free-coding-models web',
   'free-coding-models --daemon',
   'free-coding-models --daemon-bg',
   'free-coding-models --daemon-status',

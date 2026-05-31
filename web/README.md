@@ -14,11 +14,14 @@ To maintain maximum code sharing, **95%+ of all components and logic are kept co
 
 ## ⚡ API & Event Integration
 
-The React app relies on HTTP and Server-Sent Events (SSE) to talk to the engine:
-* `GET /api/models`: Fetches the live model catalog, complete with stability scores and latency details.
-* `GET /api/config`: Retrieves active provider toggles (keys are masked).
-* `POST /api/settings`: Updates API keys and provider preferences.
-* `GET /api/events` / `EventSource`: Listens for real-time SSE updates broadcasted by the ping and benchmark loops.
+The React app uses a realtime-first connection strategy against the local engine:
+* **Socket.IO** is preferred in dev/web-server mode for instant per-model ping and benchmark updates.
+* **`GET /api/events` / `EventSource`** is the streaming fallback used by daemon/Docker surfaces.
+* **`GET /api/state`** returns the wrapped live dashboard state for REST fallback polling.
+* **`GET /api/models`** remains the legacy flat model catalog endpoint for simple clients.
+* **`GET /api/config`** retrieves active provider toggles (keys are masked).
+* **`POST /api/settings`** updates API keys and provider preferences.
+* **`POST /api/global-benchmark`** benchmarks only the models currently visible in the web table, so filters/search control the benchmark scope.
 
 ---
 

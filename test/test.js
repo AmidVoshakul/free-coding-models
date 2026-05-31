@@ -1786,6 +1786,14 @@ describe('parseArgs', () => {
     assert.equal(parseArgs(argv()).daemonMode, false)
   })
 
+  it('detects web dashboard mode without treating subcommand as API key', () => {
+    const subcommand = parseArgs(argv('web'))
+    assert.equal(subcommand.webMode, true)
+    assert.equal(subcommand.apiKey, null)
+    assert.equal(parseArgs(argv('--web')).webMode, true)
+    assert.equal(parseArgs(argv('--gui')).webMode, true)
+  })
+
   it('detects --help and -h flags', () => {
     assert.equal(parseArgs(argv('--help')).helpMode, true)
     assert.equal(parseArgs(argv('-h')).helpMode, true)
@@ -1842,6 +1850,7 @@ describe('cli help text', () => {
       '--json',
       '--tier <S|A|B|C>',
       '--recommend',
+      'web | --web | --gui',
       '--daemon',
       '--daemon-bg',
       '--daemon-status',
@@ -4459,6 +4468,39 @@ describe('getManualInstallCmd', () => {
 
   it('returns yarn command string', () => {
     assert.equal(getManualInstallCmd('yarn', '2.0.0'), 'yarn global add free-coding-models@2.0.0')
+  })
+})
+
+describe('web dashboard table sorting', () => {
+  const sortableWebColumns = [
+    'mood', 'idx', 'tier', 'sweScore', 'ctx', 'label', 'origin', 'latestPing',
+    'avg', 'condition', 'verdict', 'stability', 'uptime', 'aiLatency', 'tps', 'trend',
+  ]
+
+  it('keeps every visible web table column explicitly sortable', () => {
+    const tableSource = readFileSync(join(ROOT, 'web/src/components/dashboard/ModelTable.jsx'), 'utf8')
+
+    assert.match(tableSource, /const SORTABLE_COLUMN_IDS = new Set/, 'header clickability must not depend on TanStack display-column accessors')
+    assert.match(tableSource, /SORTABLE_COLUMN_IDS\.has\(col\.id\)/, 'headers must use the explicit sortable allowlist')
+
+    for (const columnId of sortableWebColumns) {
+      assert.ok(tableSource.includes(`'${columnId}'`), `${columnId} must be present in the sortable allowlist`)
+      const idPattern = columnId === 'condition'
+        ? /id:\s*'condition',[\s\S]*?enableSorting:\s*true/
+        : new RegExp(`(?:id:\\s*'${columnId}'|accessor\\('${columnId}'|accessor\\("${columnId}")[\\s\\S]*?enableSorting:\\s*true`)
+      assert.match(tableSource, idPattern, `${columnId} column must opt into sorting`)
+    }
+  })
+
+  it('has comparator support for every sortable web table column', () => {
+    const filterSource = readFileSync(join(ROOT, 'web/src/hooks/useFilter.js'), 'utf8')
+
+    for (const columnId of sortableWebColumns) {
+      assert.ok(
+        filterSource.includes(`sortColumn === '${columnId}'`) || columnId === 'avg',
+        `${columnId} must be handled by useFilter sorting`
+      )
+    }
   })
 })
 
