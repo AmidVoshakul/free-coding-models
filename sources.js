@@ -48,6 +48,7 @@ export const nvidiaNim = [
   ['deepseek-ai/deepseek-v4-flash',                'DeepSeek V4 Flash',   'S+', '72.0%', '128k'],
   ['z-ai/glm5',                                    'GLM 5',               'S+', '73.8%', '200k'],
   ['stepfun-ai/step-3.5-flash',                    'Step 3.5 Flash',      'S+', '74.4%', '256k'],
+  ['stepfun-ai/step-3.7-flash',                    'Step 3.7 Flash',      'S+', '74.4%', '256k'],
   ['qwen/qwen3-coder-480b-a35b-instruct',          'Qwen3 Coder 480B',    'S+', '70.6%', '256k'],
   // ── S tier — SWE-bench Verified 60–70% ──
   ['qwen/qwen3-next-80b-a3b-instruct',             'Qwen3 80B Instruct',  'S',  '65.0%', '128k'],
@@ -135,11 +136,12 @@ export const sambanova = [
 export const openrouter = [
   // ── S+ tier — live :free chat/coding models ──
   ['qwen/qwen3-coder:free',                     'Qwen3 Coder 480B',   'S+', '70.6%', '262k'],
-  ['minimax/minimax-m2.5:free',                 'MiniMax M2.5',       'S+', '80.2%', '197k'],
+  // Removed (2026-05-31): minimax/minimax-m2.5:free (free tier removed from OpenRouter)
   ['z-ai/glm-4.5-air:free',                     'GLM 4.5 Air',        'S+', '72.0%', '131k'],
-  ['deepseek/deepseek-v4-flash:free',           'DeepSeek V4 Flash',  'S',  '-',     '1M'],
+  // Removed (2026-05-31): deepseek/deepseek-v4-flash:free (free tier removed from OpenRouter)
   ['poolside/laguna-m.1:free',                  'Poolside Laguna M.1', 'S+', '-',     '131k'],
   ['poolside/laguna-xs.2:free',                 'Poolside Laguna XS.2','S+', '-',     '131k'],
+  ['moonshotai/kimi-k2.6:free',                 'Kimi K2.6',          'S+', '76.8%', '262k'],
   // ── S tier — live :free chat/coding models ──
   ['qwen/qwen3-next-80b-a3b-instruct:free',     'Qwen3 80B Instruct', 'S',  '65.0%', '262k'],
   ['openai/gpt-oss-120b:free',                  'GPT OSS 120B',       'S',  '60.0%', '131k'],
@@ -161,7 +163,7 @@ export const openrouter = [
   ['meta-llama/llama-3.2-3b-instruct:free',     'Llama 3.2 3B',       'B',  '20.0%', '128k'],
   // ── B+ tier ──
   ['nvidia/nemotron-nano-9b-v2:free',           'Nemotron Nano 9B',   'B+', '18.0%', '128k'],
-  ['baidu/cobuddy:free',                        'Baidu CoBuddy',      'B+', '-',     '131k'],
+  // Removed (2026-05-31): baidu/cobuddy:free (free tier removed from OpenRouter)
   // ── B tier ──
   ['openrouter/free',                           'OpenRouter Free',    'B',  '-',     '200k'],
   // ── C tier ──
@@ -187,7 +189,7 @@ export const githubModels = [
   ['deepseek/deepseek-v3-0324',                   'DeepSeek V3 0324',    'S',  '62.0%', '128k'],
   ['meta/meta-llama-3.1-405b-instruct',           'Llama 3.1 405B',      'A',  '44.0%', '128k'],
   ['meta/llama-4-maverick-17b-128e-instruct-fp8', 'Llama 4 Maverick',    'S',  '62.0%', '1M'],
-  ['meta/llama-4-scout-17b-16e-instruct',         'Llama 4 Scout',       'A',  '44.0%', '10M'],
+  ['meta/llama-4-scout-17b-16e-instruct',         'Llama 4 Scout',       'A',  '44.0%', '1M'],
   ['meta/llama-3.3-70b-instruct',                 'Llama 3.3 70B',       'A-', '39.5%', '128k'],
   ['meta/llama-3.2-90b-vision-instruct',          'Llama 3.2 90B Vision','A-', '-',     '128k'],
   ['meta/llama-3.2-11b-vision-instruct',          'Llama 3.2 11B Vision','B',  '-',     '128k'],
@@ -292,7 +294,7 @@ export const cloudflare = [
   ['@cf/zai-org/glm-4.7-flash',               'GLM-4.7-Flash',     'S',  '59.2%', '131k'],
   ['@cf/openai/gpt-oss-120b',                 'GPT OSS 120B',      'S',  '60.0%', '128k'],
   // ── A+ tier ──
-  ['@cf/qwen/qwq-32b',                        'QwQ 32B',           'A+', '50.0%', '131k'],
+  // Removed (2026-05-31): @cf/qwen/qwq-32b (upstream deprecation — Groq removed qwen-qwq-32b July 2025)
   ['@cf/nvidia/nemotron-3-120b-a12b',         'Nemotron 3 Super',  'A+', '56.0%', '128k'],
   // ── A tier ──
   ['@cf/meta/llama-4-scout-17b-16e-instruct', 'Llama 4 Scout',     'A',  '44.0%', '131k'],

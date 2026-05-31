@@ -6,7 +6,7 @@
 
 <p align="center">
   <strong>Find the fastest free coding model in seconds</strong><br>
-  Track ~170 models across ~15 trusted free or free-limited AI providers in real time<br><br>
+  Track ~153 models across 16 trusted free or free-limited AI providers in real time<br><br>
   <strong>Install Free API endpoints to your favorite AI coding tools:</strong><br>
   OpenCode CLI / Desktop / WebUI, OpenClaw, Crush, Goose, Aider, Kilo CLI, Qwen Code, OpenHands, Amp, Hermes, Continue, Cline, Xcode, Pi, Rovo, Gemini and more...<br><br>
   <strong>Use Kimi K2, DeepSeek V3, GPT-OSS, Qwen3, MiniMax M2, GLM, Llama 4, Gemma 4, Devstral and more — for free</strong>
@@ -16,7 +16,7 @@
   <img src="https://img.shields.io/npm/v/free-coding-models?color=3d6b00&label=npm&logo=npm" alt="npm version" width="200"><br>
   <img src="https://img.shields.io/node/v/free-coding-models?color=3d6b00&logo=node.js" alt="node version" width="200"><br>
   <img src="https://img.shields.io/npm/l/free-coding-models?color=3d6b00" alt="license" width="200"><br>
-  <img src="https://img.shields.io/badge/models-157+-3d6b00?logo=nvidia" alt="models count" width="200"><br>
+  <img src="https://img.shields.io/badge/models-153+-3d6b00?logo=nvidia" alt="models count" width="200"><br>
   <img src="https://img.shields.io/badge/providers-16-1a56db" alt="providers count" width="200">
 </p>
 
@@ -59,7 +59,7 @@ free-coding-models
 
 ## 💡 Why this tool?
 
-There are **~157 cataloged free or free-limited coding models** across 16 vetted providers. Which one is fastest right now? Which one is actually stable versus just lucky on the last ping?
+There are **~153 cataloged free or free-limited coding models** across 16 vetted providers. Which one is fastest right now? Which one is actually stable versus just lucky on the last ping?
 
 This CLI pings them all in parallel, shows live latency, and calculates a **live Stability Score (0-100)**. Average latency alone is misleading if a model randomly spikes to 6 seconds; the stability score measures true reliability by combining **p95 latency** (30%), **jitter/variance** (30%), **spike rate** (20%), and **uptime** (20%). 
 
@@ -73,18 +73,18 @@ It then writes the model you pick directly into your coding tool's config — so
 
 Create a free account on one provider below to get started:
 
-**~157 coding models** across 16 active providers, ranked by practical free-tier usefulness.
+**~153 coding models** across 16 active providers, ranked by practical free-tier usefulness.
 
 | # | Provider | Models | Tier range | Free tier | Env var |
 |---|----------|--------|-----------|-----------|--------|
-| 1 | [NVIDIA NIM](https://build.nvidia.com) | 26 | S+ → C | ~40 RPM (no credit card) | `NVIDIA_API_KEY` |
+| 1 | [NVIDIA NIM](https://build.nvidia.com) | 27 | S+ → C | ~40 RPM (no credit card) | `NVIDIA_API_KEY` |
 | 2 | [Groq](https://console.groq.com/keys) | 8 | S → B | 30 RPM, 1K‑14.4K req/day (no credit card) | `GROQ_API_KEY` |
 | 3 | [Cerebras](https://cloud.cerebras.ai) | 2 | S+ → S | 30 RPM, 1M tokens/day (no credit card) | `CEREBRAS_API_KEY` |
 | 4 | [Google AI Studio](https://aistudio.google.com/apikey) | 7 | S+ → A | Gemini free quotas vary by model/region | `GOOGLE_API_KEY` |
 | 5 | [GitHub Models](https://models.github.ai) | 15 | S+ → C | Quota depends on GitHub/Copilot tier | `GITHUB_TOKEN` |
 | 6 | [Mistral La Plateforme](https://console.mistral.ai/api-keys) | 5 | S+ → A | Experiment plan, free evaluation tier | `MISTRAL_API_KEY` |
-| 7 | [Cloudflare Workers AI](https://dash.cloudflare.com) | 14 | S+ → B | 10K neurons/day, 300 RPM (no credit card) | `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` |
-| 8 | [OpenRouter](https://openrouter.ai/keys) | 26 | S+ → C | 50 req/day free, 1K/day with $10 spend | `OPENROUTER_API_KEY` |
+| 7 | [Cloudflare Workers AI](https://dash.cloudflare.com) | 13 | S+ → B | 10K neurons/day, 300 RPM (no credit card) | `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` |
+| 8 | [OpenRouter](https://openrouter.ai/keys) | 24 | S+ → C | 50 req/day free, 1K/day with $10 spend | `OPENROUTER_API_KEY` |
 | 9 | [SambaNova](https://cloud.sambanova.ai/apis) | 7 | S+ → B+ | Small developer quota, useful for light usage | `SAMBANOVA_API_KEY` |
 | 10 | [OVHcloud AI Endpoints](https://endpoints.ai.cloud.ovh.net) | 10 | S → B | 2 req/min/IP free, 400 RPM with key | `OVH_AI_ENDPOINTS_ACCESS_TOKEN` |
 | 11 | [Codestral](https://console.mistral.ai/api-keys) | 1 | B+ | 30 RPM, 2K req/day | `MISTRAL_API_KEY` |
