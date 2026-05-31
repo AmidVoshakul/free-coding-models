@@ -5,6 +5,7 @@
  * @functions AnalyticsView → renders the three analytics cards
  */
 import { useMemo } from 'react'
+import { IconActivity, IconTrophy } from '@tabler/icons-react'
 import TierBadge from '../atoms/TierBadge.jsx'
 import styles from './AnalyticsView.module.css'
 
@@ -40,7 +41,10 @@ export default function AnalyticsView({ models }) {
   return (
     <div className={styles.page}>
       <div className={styles.pageHeader}>
-        <h1 className={styles.pageTitle}>📊 Analytics</h1>
+        <h1 className={styles.pageTitle}>
+          <IconActivity size={24} stroke={1.5} style={{ marginRight: 8, verticalAlign: 'middle' }} />
+          Analytics
+        </h1>
         <p className={styles.pageSubtitle}>Real-time insights across all providers and models</p>
       </div>
 
@@ -69,17 +73,19 @@ export default function AnalyticsView({ models }) {
         </div>
 
         <div className={styles.card}>
-          <h3 className={styles.cardTitle}>🏆 Fastest Models</h3>
+          <h3 className={styles.cardTitle} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <IconTrophy size={16} stroke={1.5} />
+            Fastest Models
+          </h3>
           <div className={styles.cardBody}>
             {leaderboard.length === 0 ? (
               <div className={styles.empty}>Waiting for ping data...</div>
             ) : (
               leaderboard.map((m, i) => {
                 const rankCls = i < 3 ? styles[`rank${i + 1}`] : ''
-                const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1)
                 return (
                   <div key={m.modelId} className={styles.leaderItem}>
-                    <div className={`${styles.leaderRank} ${rankCls}`}>{medal}</div>
+                    <div className={`${styles.leaderRank} ${rankCls}`}>{i + 1}</div>
                     <span className={styles.leaderName}>{m.label}</span>
                     <span className={styles.leaderLatency}>{m.avg}ms</span>
                   </div>

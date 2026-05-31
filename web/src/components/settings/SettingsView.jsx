@@ -6,6 +6,7 @@
  * @functions SettingsView → main settings page component
  */
 import { useState, useEffect, useCallback } from 'react'
+import { IconSettings, IconPlug, IconCircleCheck, IconKey, IconEye, IconEyeOff, IconCopy, IconTrash } from '@tabler/icons-react'
 import styles from './SettingsView.module.css'
 import { maskKey } from '../../utils/format.js'
 
@@ -160,7 +161,10 @@ export default function SettingsView({ onToast }) {
   return (
     <div className={styles.page}>
       <div className={styles.pageHeader}>
-        <h1 className={styles.pageTitle}>⚙️ Provider Settings</h1>
+        <h1 className={styles.pageTitle}>
+          <IconSettings size={24} stroke={1.5} style={{ marginRight: 8, verticalAlign: 'middle' }} />
+          Provider Settings
+        </h1>
         <p className={styles.pageSubtitle}>
           Manage your API keys and provider configurations. Keys are stored locally in{' '}
           <code>~/.free-coding-models.json</code>
@@ -194,13 +198,23 @@ export default function SettingsView({ onToast }) {
           return (
             <div key={key} className={`${styles.card} ${isExpanded ? styles.cardExpanded : ''}`}>
               <div className={styles.cardHeader} onClick={() => toggleCard(key)}>
-                <div className={styles.cardIcon}>🔌</div>
+                <div className={styles.cardIcon}>
+                  <IconPlug size={20} stroke={1.5} />
+                </div>
                 <div className={styles.cardInfo}>
                   <div className={styles.cardName}>{p.name}</div>
                   <div className={styles.cardMeta}>{p.modelCount} models · {key}</div>
                 </div>
                 <span className={`${styles.cardStatus} ${p.hasKey ? styles.statusConfigured : styles.statusMissing}`}>
-                  {p.hasKey ? '✅ Active' : '🔑 No Key'}
+                  {p.hasKey ? (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <IconCircleCheck size={14} stroke={1.5} /> Active
+                    </span>
+                  ) : (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <IconKey size={14} stroke={1.5} /> No Key
+                    </span>
+                  )}
                 </span>
                 <span className={`${styles.toggleIcon} ${isExpanded ? styles.toggleIconExpanded : ''}`}>▼</span>
               </div>
@@ -216,10 +230,14 @@ export default function SettingsView({ onToast }) {
                         </span>
                         <div className={styles.keyDisplayActions}>
                           <button className={styles.actionBtn} onClick={() => toggleRevealKey(key)} title={isRevealed ? 'Hide' : 'Reveal'}>
-                            {isRevealed ? '🙈' : '👁️'}
+                            {isRevealed ? <IconEyeOff size={14} stroke={1.5} /> : <IconEye size={14} stroke={1.5} />}
                           </button>
-                          <button className={styles.actionBtn} onClick={() => copyKey(key)} title="Copy">📋</button>
-                          <button className={`${styles.actionBtn} ${styles.actionBtnDanger}`} onClick={() => deleteKey(key)} title="Delete Key">🗑️</button>
+                          <button className={styles.actionBtn} onClick={() => copyKey(key)} title="Copy">
+                            <IconCopy size={14} stroke={1.5} />
+                          </button>
+                          <button className={`${styles.actionBtn} ${styles.actionBtnDanger}`} onClick={() => deleteKey(key)} title="Delete Key">
+                            <IconTrash size={14} stroke={1.5} />
+                          </button>
                         </div>
                       </div>
                     </div>

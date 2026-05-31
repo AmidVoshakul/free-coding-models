@@ -5,6 +5,7 @@
  * `onClose` callback, and `onToast` for feedback notifications.
  * @functions ExportModal → renders the modal with three export option buttons
  */
+import { IconUpload, IconBraces, IconFileSpreadsheet, IconClipboard } from '@tabler/icons-react'
 import { downloadFile } from '../../utils/download.js'
 import styles from './ExportModal.module.css'
 
@@ -45,27 +46,30 @@ export default function ExportModal({ models, onClose, onToast }) {
     <div className={styles.overlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className={styles.modal}>
         <div className={styles.modalHeader}>
-          <h2 className={styles.modalTitle}>📤 Export Data</h2>
+          <h2 className={styles.modalTitle}>
+            <IconUpload size={20} stroke={1.5} style={{ marginRight: 8, verticalAlign: 'middle' }} />
+            Export Data
+          </h2>
           <button className={styles.modalClose} onClick={onClose}>&times;</button>
         </div>
         <div className={styles.modalBody}>
           <div className={styles.options}>
             <button className={styles.option} onClick={handleJson}>
-              <span className={styles.optionIcon}>{'{ }'}</span>
+              <span className={styles.optionIcon}><IconBraces size={20} stroke={1.5} /></span>
               <div>
                 <span className={styles.optionLabel}>Export as JSON</span>
                 <span className={styles.optionDesc}>Full model data with all metrics</span>
               </div>
             </button>
             <button className={styles.option} onClick={handleCsv}>
-              <span className={styles.optionIcon}>📊</span>
+              <span className={styles.optionIcon}><IconFileSpreadsheet size={20} stroke={1.5} /></span>
               <div>
                 <span className={styles.optionLabel}>Export as CSV</span>
                 <span className={styles.optionDesc}>Spreadsheet-compatible format</span>
               </div>
             </button>
             <button className={styles.option} onClick={handleClipboard}>
-              <span className={styles.optionIcon}>📋</span>
+              <span className={styles.optionIcon}><IconClipboard size={20} stroke={1.5} /></span>
               <div>
                 <span className={styles.optionLabel}>Copy to Clipboard</span>
                 <span className={styles.optionDesc}>Copy model summary as text</span>
@@ -77,3 +81,4 @@ export default function ExportModal({ models, onClose, onToast }) {
     </div>
   )
 }
+

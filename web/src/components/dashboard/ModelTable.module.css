@@ -1,46 +1,136 @@
+/**
+ * @file web/src/components/dashboard/ModelTable.module.css
+ * @description Styles for ModelTable with all CLI columns — full horizontal scroll support.
+ */
 .container {
   background: var(--color-bg-card);
-  backdrop-filter: blur(12px) saturate(1.5);
-  -webkit-backdrop-filter: blur(12px) saturate(1.5);
   border: 1px solid var(--color-border);
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
+  margin: 16px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ─── Table with fixed layout + min-width for horizontal scroll ─── */
+.table {
+  width: 100%;
+  min-width: 1300px;
+  border-collapse: collapse;
+  font-size: 12px;
+  table-layout: fixed;
+}
+
+/* ─── Fixed column widths matching CLI proportions ─── */
+.th, .table td {
   overflow: hidden;
-  margin: 16px 0;
+  text-overflow: ellipsis;
 }
-.table { width: 100%; border-collapse: collapse; font-size: 13px; }
+
+/* Column widths — match CLI table column widths */
+.th:nth-child(1), .table td:nth-child(1) { width: 28px;  text-align: center; } /* ❔ Mood */
+.th:nth-child(2), .table td:nth-child(2) { width: 36px;  text-align: center; } /* # Rank */
+.th:nth-child(3), .table td:nth-child(3) { width: 46px;  text-align: center; } /* Tier */
+.th:nth-child(4), .table td:nth-child(4) { width: 52px;  text-align: right;   } /* SWE% */
+.th:nth-child(5), .table td:nth-child(5) { width: 48px;  text-align: right;   } /* CTX */
+.th:nth-child(6), .table td:nth-child(6) { width: 200px; text-align: left;    } /* Model */
+.th:nth-child(7), .table td:nth-child(7) { width: 110px; text-align: left;    } /* Provider */
+.th:nth-child(8), .table td:nth-child(8) { width: 80px;  text-align: right;   } /* Last Ping */
+.th:nth-child(9), .table td:nth-child(9) { width: 72px;  text-align: right;   } /* Avg */
+.th:nth-child(10), .table td:nth-child(10) { width: 110px; text-align: left;  } /* Health */
+.th:nth-child(11), .table td:nth-child(11) { width: 96px;  text-align: left;  } /* Verdict */
+.th:nth-child(12), .table td:nth-child(12) { width: 90px;  text-align: right;  } /* Stability */
+.th:nth-child(13), .table td:nth-child(13) { width: 48px;  text-align: right;  } /* Up% */
+.th:nth-child(14), .table td:nth-child(14) { width: 80px;  text-align: right;  } /* AI Lat. */
+.th:nth-child(15), .table td:nth-child(15) { width: 48px;  text-align: right;  } /* TPS */
+.th:nth-child(16), .table td:nth-child(16) { width: 96px;  text-align: center; } /* Trend */
+
+/* ─── Header ─── */
 .th {
-  padding: 12px 14px; font-size: 11px; font-weight: 700; text-transform: uppercase;
-  letter-spacing: 0.8px; color: var(--color-text-muted); background: var(--color-bg-elevated);
-  border-bottom: 1px solid var(--color-border); white-space: nowrap; user-select: none; cursor: default;
+  padding: 9px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-text-muted);
+  background: var(--color-bg-elevated);
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+  user-select: none;
+  cursor: pointer;
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
-.th:hover { color: var(--color-accent); }
-.table td { padding: 10px 14px; border-bottom: 1px solid var(--color-border); white-space: nowrap; }
-.table tbody tr { cursor: pointer; transition: background 150ms; }
+.th:hover { color: var(--color-accent); background: var(--color-bg-active); }
+
+/* ─── Sort icons in headers ─── */
+.sortIcon   { opacity: 0.3; margin-left: 2px; font-size: 9px; }
+.sortIconActive { color: var(--color-accent); margin-left: 2px; font-size: 10px; font-weight: 800; }
+
+/* ─── Data cells ─── */
+.table td {
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+.table tbody tr {
+  cursor: pointer;
+  transition: background 100ms;
+}
 .table tbody tr:hover { background: var(--color-bg-hover); }
-.tdRank { text-align: center; font-family: var(--font-mono); font-weight: 600; color: var(--color-text-dim); }
+
+/* ─── Cell-specific styles ─── */
+.tdMood  { text-align: center; font-size: 14px; }
+.tdRank  { font-family: var(--font-mono); font-size: 11px; color: var(--color-text-dim); text-align: center; }
+.tdPing  { font-family: var(--font-mono); font-size: 12px; text-align: right; }
+.tdHealth{ font-family: var(--font-mono); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tdAi    { font-family: var(--font-mono); font-size: 12px; text-align: right; }
+.tdTps   { font-family: var(--font-mono); font-size: 12px; text-align: right; }
+
+/* ─── Rank medals ─── */
 .rank1 td:first-child { border-left: 3px solid #ffd700; }
 .rank2 td:first-child { border-left: 3px solid #c0c0c0; }
 .rank3 td:first-child { border-left: 3px solid #cd7f32; }
-.modelCell { display: flex; flex-direction: column; }
-.modelName { font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 4px; }
-.modelId { font-family: var(--font-mono); font-size: 10px; color: var(--color-text-dim); margin-top: 1px; }
+
+/* ─── Model cell ─── */
+.modelCell    { display: flex; align-items: center; gap: 6px; overflow: hidden; }
+.modelMeta    { flex: 1; min-width: 0; }
+.modelHeader  { display: flex; align-items: center; gap: 4px; }
+.modelName    { font-weight: 600; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.modelId      { font-family: var(--font-mono); font-size: 9px; color: var(--color-text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .noKey {
-  font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 3px;
-  background: rgba(255,170,0,0.12); color: #ffaa00; border: 1px solid rgba(255,170,0,0.2); margin-left: 6px;
+  font-size: 9px; font-weight: 600; padding: 1px 5px; border-radius: 3px; flex-shrink: 0;
+  background: rgba(255,170,0,0.12); color: #ffaa00; border: 1px solid rgba(255,170,0,0.2);
 }
+
+/* ─── Provider pill ─── */
 .providerPill {
-  display: inline-block; font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 999px;
-  background: var(--color-accent-dim); color: var(--color-text-muted); border: 1px solid var(--color-border);
+  display: inline-block; font-size: 10px; font-weight: 500; padding: 2px 7px; border-radius: 999px;
+  background: var(--color-accent-dim); color: var(--color-text-muted);
+  border: 1px solid var(--color-border); white-space: nowrap;
 }
+
+/* ─── SWE% ─── */
 .swe { font-family: var(--font-mono); font-weight: 600; }
 .sweHigh { color: #ffd700; }
-.sweMid { color: #3ddc84; }
-.sweLow { color: var(--color-text-dim); }
-.ctx { font-family: var(--font-mono); font-size: 12px; color: var(--color-text-muted); }
-.ping { font-family: var(--font-mono); font-weight: 600; }
-.pingFast { color: #00ff88; }
+.sweMid  { color: #3ddc84; }
+.sweLow  { color: var(--color-text-dim); }
+
+/* ─── CTX ─── */
+.ctx { font-family: var(--font-mono); font-size: 11px; }
+
+/* ─── Ping colors ─── */
+.ping       { font-family: var(--font-mono); font-weight: 600; }
+.pingFast   { color: #00ff88; }
 .pingMedium { color: #ffaa00; }
-.pingSlow { color: #ff4444; }
-.pingNone { color: var(--color-text-dim); }
-.uptime { font-family: var(--font-mono); font-size: 12px; }
+.pingSlow   { color: #ff4444; }
+.pingNone   { color: var(--color-text-dim); }
+
+/* ─── Uptime ─── */
+.uptime { font-family: var(--font-mono); font-size: 11px; }
+
+/* ─── Empty state ─── */
 .empty { text-align: center; padding: 60px 0; color: var(--color-text-muted); }

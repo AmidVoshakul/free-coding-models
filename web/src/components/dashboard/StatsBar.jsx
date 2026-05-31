@@ -3,6 +3,7 @@
  * @description Stats cards row showing total models, online count, avg latency, fastest model, providers.
  */
 import { useMemo } from 'react'
+import { IconServer, IconCircleCheck, IconBolt, IconTrophy, IconGlobe } from '@tabler/icons-react'
 import styles from './StatsBar.module.css'
 
 export default function StatsBar({ models }) {
@@ -16,11 +17,11 @@ export default function StatsBar({ models }) {
     const fastest = [...onlineWithPing].sort((a, b) => a.avg - b.avg)[0]
     const providers = new Set(models.map(m => m.providerKey)).size
     return [
-      { icon: '📊', value: total, label: 'Total Models' },
-      { icon: '🟢', value: online, label: 'Online' },
-      { icon: '⚡', value: avgLatency != null ? `${avgLatency}ms` : '—', label: 'Avg Latency' },
-      { icon: '🏆', value: fastest ? fastest.label : '—', label: 'Fastest Model' },
-      { icon: '🌐', value: providers, label: 'Providers' },
+      { icon: <IconServer size={20} stroke={1.5} />, value: total, label: 'Total Models' },
+      { icon: <IconCircleCheck size={20} stroke={1.5} />, value: online, label: 'Online' },
+      { icon: <IconBolt size={20} stroke={1.5} />, value: avgLatency != null ? `${avgLatency}ms` : '—', label: 'Avg Latency' },
+      { icon: <IconTrophy size={20} stroke={1.5} />, value: fastest ? fastest.label : '—', label: 'Fastest Model' },
+      { icon: <IconGlobe size={20} stroke={1.5} />, value: providers, label: 'Providers' },
     ]
   }, [models])
 
@@ -38,3 +39,4 @@ export default function StatsBar({ models }) {
     </section>
   )
 }
+

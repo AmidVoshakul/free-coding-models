@@ -88,6 +88,7 @@ export default function App() {
         currentView={currentView}
         onNavigate={setCurrentView}
         onToggleTheme={toggleTheme}
+        theme={theme}
       />
 
       <div className="app-content">
@@ -99,6 +100,7 @@ export default function App() {
               onToggleTheme={toggleTheme}
               onOpenSettings={() => setCurrentView('settings')}
               onOpenExport={() => setExportOpen(true)}
+              theme={theme}
             />
             <StatsBar models={models} />
             <FilterBar
@@ -113,6 +115,9 @@ export default function App() {
             <ModelTable
               filtered={filtered}
               onSelectModel={handleSelectModel}
+              sortColumn={sortColumn}
+              sortDirection={sortDirection}
+              onSort={toggleSort}
             />
           </div>
         )}

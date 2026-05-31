@@ -2,6 +2,8 @@
  * @file web/src/hooks/useFilter.js
  * @description React hook for model filtering and sorting state.
  * 📖 Manages tier/status/provider/text filters + sort column/direction.
+ * Supports all CLI columns: verdict, idx, tier, sweScore, ctx, label, origin,
+ * latestPing, avg, condition (health), stability, uptime, aiLatency, tps.
  * → useFilter
  */
 import { useState, useMemo, useCallback } from 'react'
@@ -52,20 +54,58 @@ export function useFilter(models) {
       )
     }
 
+    // ─── Sort ───────────────────────────────────────────────────────────────
     result.sort((a, b) => {
       let cmp = 0
       const col = sortColumn
-      if (col === 'idx') cmp = a.idx - b.idx
-      else if (col === 'tier') cmp = tierRank(a.tier) - tierRank(b.tier)
-      else if (col === 'label') cmp = a.label.localeCompare(b.label)
-      else if (col === 'origin') cmp = a.origin.localeCompare(b.origin)
-      else if (col === 'sweScore') cmp = parseSwe(a.sweScore) - parseSwe(b.sweScore)
-      else if (col === 'ctx') cmp = formatCtx(a.ctx) - formatCtx(b.ctx)
-      else if (col === 'latestPing') cmp = (a.latestPing ?? Infinity) - (b.latestPing ?? Infinity)
-      else if (col === 'avg') cmp = (a.avg === Infinity ? 99999 : a.avg) - (b.avg === Infinity ? 99999 : b.avg)
-      else if (col === 'stability') cmp = (a.stability ?? -1) - (b.stability ?? -1)
-      else if (col === 'verdict') cmp = verdictRank(a.verdict) - verdictRank(b.verdict)
-      else if (col === 'uptime') cmp = (a.uptime ?? 0) - (b.uptime ?? 0)
+
+      if (col === 'idx') {
+        cmp = (a.idx ?? 9999) - (b.idx ?? 9999)
+      } else if (col === 'tier') {
+        cmp = tierRank(a.tier) - tierRank(b.tier)
+      } else if (col === 'label') {
+        cmp = a.label.localeCompare(b.label)
+      } else if (col === 'origin') {
+        cmp = a.origin.localeCompare(b.origin)
+      } else if (col === 'sweScore') {
+        cmp = parseSwe(a.sweScore) - parseSwe(b.sweScore)
+      } else if (col === 'ctx') {
+        cmp = formatCtx(a.ctx) - formatCtx(b.ctx)
+      } else if (col === 'latestPing') {
+        // 📖 Latest ping: get last successful ping from pingHistory/pings array
+        const aPings = a.pingHistory || a.pings || []
+        const bPings = b.pingHistory || b.pings || []
+        const aLast = aPings.length > 0 ? aPings[aPings.length - 1] : null
+        const bLast = bPings.length > 0 ? bPings[bPings.length - 1] : null
+        const aMs = aLast?.ms ?? Infinity
+        const bMs = bLast?.ms ?? Infinity
+        cmp = aMs - bMs
+      } else if (col === 'avg') {
+        cmp = (a.avg === Infinity ? 99999 : a.avg) - (b.avg === Infinity ? 99999 : b.avg)
+      } else if (col === 'condition') {
+        // 📖 Health: sort by status priority (up=0, timeout=1, down=2, pending=3, noauth=4, auth_error=5)
+        const healthOrder = { up: 0, timeout: 1, down: 2, pending: 3, noauth: 4, auth_error: 5 }
+        cmp = (healthOrder[a.status] ?? 9) - (healthOrder[b.status] ?? 9)
+      } else if (col === 'verdict') {
+        cmp = verdictRank(a.verdict) - verdictRank(b.verdict)
+      } else if (col === 'stability') {
+        cmp = (a.stability ?? -1) - (b.stability ?? -1)
+      } else if (col === 'uptime') {
+        cmp = (a.uptime ?? 0) - (b.uptime ?? 0)
+      } else if (col === 'aiLatency') {
+        // 📖 Benchmark latency from result.totalMs
+        const aMs = a.benchmark?.ok ? a.benchmark.totalMs : Infinity
+        const bMs = b.benchmark?.ok ? b.benchmark.totalMs : Infinity
+        cmp = aMs - bMs
+      } else if (col === 'tps') {
+        const aTps = a.benchmark?.ok ? (a.benchmark.tokensPerSecond ?? 0) : -1
+        const bTps = b.benchmark?.ok ? (b.benchmark.tokensPerSecond ?? 0) : -1
+        cmp = aTps - bTps
+      } else {
+        // Default: avg
+        cmp = (a.avg === Infinity ? 99999 : a.avg) - (b.avg === Infinity ? 99999 : b.avg)
+      }
+
       return sortDirection === 'asc' ? cmp : -cmp
     })
 

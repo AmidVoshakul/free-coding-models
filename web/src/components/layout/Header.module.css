@@ -18,11 +18,22 @@
 .right { display: flex; align-items: center; gap: 10px; }
 
 .logo { display: flex; align-items: center; gap: 8px; }
-.logoIcon { font-size: 22px; }
+.logoIcon {
+  color: var(--color-brand);
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-weight: 900;
+  display: flex;
+  align-items: center;
+}
 .logoText {
   font-size: 16px; font-weight: 700;
-  background: linear-gradient(135deg, var(--color-accent), #06b6d4);
-  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  color: var(--color-text);
+  display: flex;
+  align-items: center;
+}
+.logoTextHighlight {
+  color: var(--color-brand);
 }
 .version {
   font-size: 11px; font-weight: 500; font-family: var(--font-mono);

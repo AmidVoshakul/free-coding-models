@@ -412,7 +412,7 @@ export function renderTable({
   })
 
   const lines = [
-    `  ${themeColors.accentBold(`🚀 free-coding-models v${LOCAL_VERSION}`)}${modeBadge}${pingControlBadge}${tierBadge}${originBadge}${chalk.reset('')}   ` +
+    `  ${chalk.rgb(118, 185, 0).bgRgb(0, 0, 0).bold(' > ')}${chalk.rgb(118, 185, 0).bgRgb(0, 0, 0).bold('free')}${chalk.rgb(255, 255, 255).bgRgb(0, 0, 0).bold('-coding-models')}${chalk.rgb(118, 185, 0).bgRgb(0, 0, 0).bold('_ ')} ${themeColors.dim(`v${LOCAL_VERSION}`)}${modeBadge}${pingControlBadge}${tierBadge}${originBadge}${chalk.reset('')}   ` +
       themeColors.dim('📦 ') + themeColors.accentBold(`${completedPings}/${totalVisible}`) + themeColors.dim('  ') +
       themeColors.success(`✅ ${up}`) + themeColors.dim(' up  ') +
       themeColors.warning(`⏳ ${timeout}`) + themeColors.dim(' timeout  ') +

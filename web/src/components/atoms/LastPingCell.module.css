@@ -1,0 +1,12 @@
+.cell {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-block;
+  min-width: 54px;
+  text-align: right;
+}
+.fast   { color: #00ff88; }
+.medium { color: #ffaa00; }
+.slow   { color: #ff4444; }
+.none   { color: var(--color-text-dim); }

@@ -4,7 +4,7 @@
  * 📖 Uses React plugin, builds to web/dist/, proxies API requests to Node server.
  * @see https://viteplus.dev/config/
  */
-import { defineConfig } from 'vite-plus'
+import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { readFileSync } from 'node:fs'
 

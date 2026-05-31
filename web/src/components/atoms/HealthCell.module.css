@@ -1,0 +1,13 @@
+.cell {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  display: inline-block;
+  min-width: 100px;
+  letter-spacing: 0.2px;
+}
+.up         { color: #00ff88; }
+.warning    { color: #ffaa00; }
+.error      { color: #ff4444; }
+.errorBold  { color: #ff4444; font-weight: 800; }
+.dim        { color: var(--color-text-dim); }
