@@ -82,7 +82,7 @@ const PROVIDER_AUTH_ENDPOINTS = {
   groq:         { url: 'https://api.groq.com/v1/models',             method: 'GET' },
   cerebras:     { url: 'https://api.cerebras.ai/v1/models',          method: 'GET' },
   sambanova:    { url: 'https://api.sambanova.ai/v1/models',         method: 'GET' },
-  openrouter:   { url: 'https://openrouter.ai/api/v1/models',        method: 'GET' },
+  openrouter:   { url: 'https://openrouter.ai/api/v1/key',             method: 'GET' },
   mistral:      { url: 'https://api.mistral.ai/v1/models',           method: 'GET' },
   huggingface:  { url: 'https://router.huggingface.co/v1/models',    method: 'GET' },
   deepinfra:    { url: 'https://api.deepinfra.com/v1/models',        method: 'GET' },
