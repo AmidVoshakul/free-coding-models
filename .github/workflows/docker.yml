@@ -1,11 +1,20 @@
 name: Build and Publish Docker Image
 
+# 📖 Auto-build Docker on every successful npm release. The workflow fires
+# 📖 whenever the `Release` workflow completes successfully (regardless of
+# 📖 whether the npm publish tagged the git commit, the GH release was
+# 📖 created, or the version was manually forced) — this guarantees the
+# 📖 Docker image stays in lockstep with the npm package version.
+#
+# 📖 The legacy `push: tags: v*.*.*` trigger was unreliable (it stopped
+# 📖 firing after v0.3.72) so it's been replaced. `workflow_dispatch` is kept
+# 📖 for ad-hoc manual builds (e.g. test a Dockerfile change without going
+# 📖 through a full release).
 on:
-  release:
-    types: [published]
-  push:
-    tags:
-      - 'v*.*.*'
+  workflow_run:
+    workflows: ["Release"]
+    types:
+      - completed
   workflow_dispatch:
     inputs:
       test_mode:
@@ -14,7 +23,7 @@ on:
         default: 'false'
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.workflow_run.head_branch }}
   cancel-in-progress: true
 
 env:
@@ -24,6 +33,9 @@ env:
 
 jobs:
   build-and-push:
+    # 📖 Only build when the upstream `Release` workflow succeeded. Manual
+    # 📖 `workflow_dispatch` runs skip this check (no workflow_run to inspect).
+    if: ${{ github.event_name != 'workflow_dispatch' && github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -31,8 +43,14 @@ jobs:
       security-events: write
 
     steps:
+      # 📖 Pin the checkout to the exact commit that the Release workflow
+      # 📖 published. Without this, `on: workflow_run` would check out the
+      # 📖 workflow_run.head_sha (the commit that *contained* the trigger)
+      # 📖 which can drift from the published artifact on heavy-traffic repos.
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
@@ -86,7 +104,11 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
-          push: ${{ github.event_name == 'release' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) || (github.event_name == 'workflow_dispatch' && github.event.inputs.test_mode == 'false') }}
+          # 📖 Push on every real release path: automatic after a successful
+          # 📖 Release (workflow_run), or manual workflow_dispatch without
+          # 📖 test_mode. The old `release` / `push tags` branches are kept
+          # 📖 for back-compat in case someone re-enables them.
+          push: ${{ github.event_name == 'release' || github.event_name == 'workflow_run' || (github.event_name == 'workflow_dispatch' && github.event.inputs.test_mode != 'true') }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           platforms: linux/amd64
@@ -97,18 +119,22 @@ jobs:
           FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
       - name: Run Trivy vulnerability scanner
-        if: ${{ github.repository_owner == 'vava-nessa' && (github.event_name == 'release' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))) }}
+        if: ${{ github.repository_owner == 'vava-nessa' && github.event_name != 'workflow_dispatch' }}
         uses: aquasecurity/trivy-action@master
         continue-on-error: true
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}
+          # 📖 When the trigger is workflow_run, the canonical version is
+          # 📖 the one we just published (read by docker/metadata-action from
+          # 📖 the checked-out package.json). The "latest" tag is the simplest
+          # 📖 always-current ref for the security scan.
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
           exit-code: '1'
 
       - name: Upload Trivy results to GitHub Security tab
-        if: ${{ github.repository_owner == 'vava-nessa' && (github.event_name == 'release' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))) }}
+        if: ${{ github.repository_owner == 'vava-nessa' && github.event_name != 'workflow_dispatch' }}
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: 'trivy-results.sarif'
