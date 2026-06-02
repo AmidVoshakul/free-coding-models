@@ -323,7 +323,7 @@ export default function App() {
 
         <div className="app-content">
           {currentView === 'dashboard' && (
-            <div className="view">
+            <main className="view">
               <FilterBar
                 filterTier={filterTier}
                 setFilterTier={setFilterTier}
@@ -362,7 +362,7 @@ export default function App() {
                 onSort={toggleSort}
                 toolMode={toolMode}
               />
-            </div>
+            </main>
           )}
 
           {currentView === 'settings' && (

@@ -13,7 +13,7 @@ import {
   IconBolt, IconSearch, IconDownload, IconSettings, IconMoon, IconSun,
   IconPlayerPlay, IconCommand, IconLayoutDashboard, IconActivity,
   IconSparkles, IconRoute, IconDots, IconQuestionMark, IconHistory,
-  IconPlug, IconFolders,
+  IconPlug, IconFolders, IconMenu2,
 } from '@tabler/icons-react'
 import ToolPicker from '../tools/ToolPicker.jsx'
 import styles from './Header.module.css'
@@ -48,22 +48,25 @@ export default function Header({
   updateSlot = null,
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const menuRef = useRef(null)
 
   // 📖 Close the overflow menu on outside click or Esc.
   useEffect(() => {
-    if (!menuOpen) return
+    if (!menuOpen && !mobileNavOpen) return
     const onClick = (e) => {
       if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false)
     }
-    const onKey = (e) => { if (e.key === 'Escape') setMenuOpen(false) }
+    const onKey = (e) => {
+      if (e.key === 'Escape') { setMenuOpen(false); setMobileNavOpen(false) }
+    }
     document.addEventListener('mousedown', onClick)
     document.addEventListener('keydown', onKey)
     return () => {
       document.removeEventListener('mousedown', onClick)
       document.removeEventListener('keydown', onKey)
     }
-  }, [menuOpen])
+  }, [menuOpen, mobileNavOpen])
 
   const handleNavClick = (item) => {
     if (item.comingIn) {
@@ -71,6 +74,7 @@ export default function Header({
       return
     }
     onNavigate(item.id)
+    setMobileNavOpen(false)
   }
 
   const handleMenuClick = (item) => {
@@ -94,6 +98,51 @@ export default function Header({
           </span>
         </div>
         <span className={styles.version}>v{__APP_VERSION__}</span>
+
+        {/* 📖 M5: Hamburger for narrow viewports (never a sidebar). Shows a
+           dropdown with all nav + overflow items on mobile. */}
+        <button
+          className={styles.hamburgerBtn}
+          onClick={() => setMobileNavOpen((o) => !o)}
+          aria-label="Navigation menu"
+          aria-expanded={mobileNavOpen}
+          aria-haspopup="true"
+        >
+          <IconMenu2 size={18} stroke={1.5} />
+        </button>
+        {mobileNavOpen && (
+          <div className={styles.mobileNav} role="menu">
+            {NAV_ITEMS.map((item) => {
+              const Icon = item.icon
+              return (
+                <button
+                  key={item.id}
+                  className={`${styles.mobileNavItem} ${currentView === item.id ? styles.mobileNavActive : ''}`}
+                  onClick={() => handleNavClick(item)}
+                  role="menuitem"
+                >
+                  <Icon size={16} stroke={1.5} />
+                  <span>{item.label}</span>
+                </button>
+              )
+            })}
+            <div className={styles.mobileNavDivider} />
+            {MENU_ITEMS.map((item) => {
+              const Icon = item.icon
+              return (
+                <button
+                  key={item.id}
+                  className={styles.mobileNavItem}
+                  onClick={() => handleMenuClick(item)}
+                  role="menuitem"
+                >
+                  <Icon size={16} stroke={1.5} />
+                  <span>{item.label}</span>
+                </button>
+              )
+            })}
+          </div>
+        )}
 
         {/* Always-visible primary nav (replaces the old left sidebar) */}
         <nav className={styles.nav} aria-label="Primary">
@@ -121,6 +170,7 @@ export default function Header({
               className={`${styles.navBtn} ${styles.menuTrigger}`}
               onClick={() => setMenuOpen((o) => !o)}
               title="More features"
+              aria-label="More features"
               aria-haspopup="true"
               aria-expanded={menuOpen}
             >
@@ -175,7 +225,7 @@ export default function Header({
           className={styles.cmdkBtn}
           onClick={onOpenCommandPalette}
           title="Command palette (⌘K / Ctrl+P)"
-          aria-label="Open command palette"
+          aria-label="Open command palette (⌘K)"
         >
           <IconCommand size={14} stroke={1.5} />
           <span className={styles.cmdkLabel}>⌘K</span>
@@ -186,6 +236,7 @@ export default function Header({
           onClick={onBenchmark}
           disabled={benchmarkRunning}
           title={benchmarkRunning ? `AI Speed Test running — ${benchmarkCompleted}/${benchmarkTotal}` : `Run AI Latency benchmark on ${modelsCount} visible models`}
+          aria-label={benchmarkRunning ? `AI Speed Test running — ${benchmarkCompleted} of ${benchmarkTotal} complete` : 'AI Latency benchmark'}
         >
           <IconPlayerPlay size={14} stroke={1.5} />
           {benchmarkRunning ? (
@@ -201,10 +252,10 @@ export default function Header({
         {/* 📖 M2: update chip slot. Hidden when no update is available. */}
         {updateSlot}
 
-        <button className={styles.iconBtn} onClick={onToggleTheme} title={`Theme: ${theme} (click to cycle auto / dark / light)`}>
+        <button className={styles.iconBtn} onClick={onToggleTheme} title={`Theme: ${theme} (click to cycle auto / dark / light)`} aria-label={`Theme: ${theme}. Click to cycle.`}>
           {theme === 'light' ? <IconMoon size={16} stroke={1.5} /> : <IconSun size={16} stroke={1.5} />}
         </button>
-        <button className={styles.iconBtn} onClick={onOpenExport} title="Export Data">
+        <button className={styles.iconBtn} onClick={onOpenExport} title="Export Data" aria-label="Export model data">
           <IconDownload size={16} stroke={1.5} />
         </button>
       </div>

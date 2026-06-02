@@ -173,12 +173,14 @@ export default function FilterBar({
       <ChipRow label="Health" items={HEALTHS} value={filterHealth} onChange={setFilterHealth} />
 
       <div className={styles.group}>
-        <label className={styles.filterLabel}>Visibility</label>
+        <label className={styles.filterLabel} htmlFor="visibility-select">Visibility</label>
         <select
+          id="visibility-select"
           className={styles.select}
           value={visibilityMode}
           onChange={(e) => setVisibilityMode(e.target.value)}
           title={VISIBILITY_MODES.find((v) => v.key === visibilityMode)?.hint}
+          aria-label="Visibility mode"
         >
           {VISIBILITY_MODES.map((v) => (
             <option key={v.key} value={v.key}>{v.label}</option>
@@ -187,11 +189,13 @@ export default function FilterBar({
       </div>
 
       <div className={styles.group}>
-        <label className={styles.filterLabel}>Provider</label>
+        <label className={styles.filterLabel} htmlFor="provider-select">Provider</label>
         <select
+          id="provider-select"
           className={styles.providerSelect}
           value={filterProvider}
           onChange={(e) => setFilterProvider(e.target.value)}
+          aria-label="Filter by provider"
         >
           <option value="all">All Providers</option>
           {providers.map((p) => (

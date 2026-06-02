@@ -64,7 +64,7 @@
 .logoTextHighlight { color: var(--color-brand); }
 .version {
   font-size: 10px; font-weight: 500; font-family: var(--font-mono);
-  color: var(--color-text-dim); background: var(--color-accent-dim);
+  color: var(--color-text-muted); background: var(--color-surface);
   padding: 2px 6px; border-radius: 999px; border: 1px solid var(--color-border);
 }
 
@@ -264,8 +264,68 @@
   .logoText { display: none; }
   .cmdkLabel { display: none; }
   .benchmarkBtn > span:not(.benchmarkRunning) { display: none; }
+  .nav { display: none; }
+  .hamburgerBtn { display: flex; }
 }
 @media (max-width: 560px) {
   .version { display: none; }
-  .navBtn { padding: 0 6px; }
+}
+
+/* ─── Hamburger + mobile nav (M5) ─── */
+.hamburgerBtn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  margin-left: 8px;
+  &:hover { color: var(--color-text); background: var(--color-bg-hover); }
+}
+
+.mobileNav {
+  position: absolute;
+  top: var(--header-h, 60px);
+  left: 0;
+  right: 0;
+  background: var(--color-bg-elevated);
+  border-bottom: 1px solid var(--color-border);
+  padding: 8px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 150;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.mobileNavItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  &:hover { background: var(--color-bg-hover); color: var(--color-text); }
+}
+
+.mobileNavActive {
+  color: var(--color-accent);
+  background: var(--color-accent-dim);
+}
+
+.mobileNavDivider {
+  height: 1px;
+  background: var(--color-border);
+  margin: 6px 0;
 }

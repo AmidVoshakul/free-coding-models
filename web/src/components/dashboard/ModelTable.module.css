@@ -239,7 +239,7 @@
 .modelMeta    { flex: 1; min-width: 0; }
 .modelHeader  { display: flex; align-items: center; gap: 5px; }
 .modelName    { font-weight: 600; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.modelId      { font-family: var(--font-mono); font-size: 9px; color: var(--color-text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.modelId      { font-family: var(--font-mono); font-size: 9px; color: var(--color-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* 📖 Provider cell now uses <ProviderLogo /> (icon + wordmark) — see
    📖 atoms/ProviderLogo.module.css for the layout. The old bordered pill
