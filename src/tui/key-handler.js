@@ -2877,26 +2877,14 @@ export function createKeyHandler(ctx) {
 
     // 📖 Profile system removed - API keys now persist permanently across all sessions
 
-    // 📖 Shift+R: Open Router Dashboard AND launch OpenCode with the selected model.
-    // 📖 If the dashboard is already open, just bring it to front.
+    // 📖 Shift+R: Open / close the Router Dashboard.
     if (key.name === 'r' && key.shift && !key.ctrl && !key.meta) {
       if (state.routerDashboardOpen) {
+        state.routerDashboardOpen = false
         state.routerDashboardScrollOffset = 0
         return
       }
       openRouterDashboardOverlay(state)
-      // 📖 If a model is selected in the main table, launch OpenCode with it after opening dashboard
-      const selected = state.visibleSorted?.[state.cursor]
-      if (selected && selected.providerKey && selected.modelId) {
-        const launchModel = {
-          modelId: selected.modelId,
-          label: selected.label,
-          tier: selected.tier,
-          providerKey: selected.providerKey,
-        }
-        // 📖 Launch asynchronously — don't await, dashboard renders while OpenCode starts
-        void startOpenCode(launchModel, state.config)
-      }
       return
     }
 
