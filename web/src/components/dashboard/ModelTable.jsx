@@ -13,7 +13,7 @@
  * 📖 Custom widths persist in localStorage via the useColumnSizing hook and survive reloads.
  * 📖 A "Reset columns" button appears in the toolbar only when the user has custom widths.
  */
-import { useMemo, useEffect } from 'react'
+import { useMemo, useEffect, useState, useCallback, Fragment } from 'react'
 import {
   useReactTable,
   getCoreRowModel,
@@ -43,6 +43,7 @@ import { sweClass } from '../../utils/ranks.js'
 // 📖 file the TUI uses; both surfaces share the source of truth for which
 // 📖 providers are compatible with which tools.
 import { getCompatibleTools } from '../../../../src/core/tool-metadata.js'
+import ExpandedDetailRow from './ExpandedDetailRow.jsx'
 import styles from './ModelTable.module.css'
 
 const colHelper = createColumnHelper()
@@ -345,7 +346,15 @@ export default function ModelTable({
   filtered, onSelectModel, onBenchmarkRow, onLaunch, favorites,
   sortColumn, sortDirection, onSort,
   toolMode = null,
+  onToast, onSetToolMode, onCycleToolMode, onOpenFallback,
 }) {
+  // 📖 Expand row state — only one row expanded at a time (accordion)
+  const [expandedRowId, setExpandedRowId] = useState(null)
+
+  const toggleExpand = useCallback((model) => {
+    const key = `${model.providerKey}/${model.modelId}`
+    setExpandedRowId((prev) => prev === key ? null : key)
+  }, [])
   // Compute top3 for medal rows
   const top3Ids = useMemo(() => {
     const online = filtered.filter(m => m.status === 'up' && m.avg != null && m.avg !== Infinity && m.avg < 99000)
@@ -501,49 +510,60 @@ export default function ModelTable({
         <tbody>
           {rows.map((row, i) => {
             const m = row.original
+            const rowKey = `${m.providerKey}/${m.modelId}`
+            const isExpanded = expandedRowId === rowKey
             const rankIdx = [...top3Ids].indexOf(m.modelId)
             const rowClasses = []
             if (rankIdx >= 0) rowClasses.push(styles[`rank${rankIdx + 1}`])
-            // 📖 Per-row benchmark state comes from the backend. The old global
-            // 📖 heuristic made every unbenchmarked row spin until the whole scan ended.
             if (m.isBenchmarking) rowClasses.push(styles.benchRow)
-            // 📖 Tool-compat dark-red row when an active tool mode is set and the
-            // 📖 model isn't compatible with it. Mirrors the TUI render-table.js
-            // 📖 behavior. The picker itself ships in M3; for M1 the visual is wired.
+            if (isExpanded) rowClasses.push(styles.expandedRow)
             if (toolMode) {
               const compat = getCompatibleTools(m.providerKey)
               if (!compat.includes(toolMode)) {
                 rowClasses.push(styles.incompatible)
               }
             }
-            // 📖 "Unusable" rows (no API key / bad API key) get the same 80% opacity
-            // 📖 fade the TUI uses, so the user can see at a glance which models
-            // 📖 they cannot actually use. The fade is applied as opacity on the
-            // 📖 whole <tr> so it composes cleanly with rank/bench/incompatible
-            // 📖 styles. Cursor hover is not implemented in the web, so the
-            // 📖 fade is never overridden by an active-selection highlight.
             if (m.status === 'noauth' || m.status === 'auth_error') {
               rowClasses.push(styles.unusable)
             }
             return (
-              <tr
-                key={row.id}
-                className={rowClasses.join(' ')}
-                onClick={() => onSelectModel(row.original)}
-              >
-                {row.getVisibleCells().map(cell => {
-                  const sizePx = `${cell.column.getSize()}px`
-                  return (
-                    <td
-                      key={cell.id}
-                      className={styles.td}
-                      style={{ width: sizePx, minWidth: sizePx, maxWidth: sizePx }}
-                    >
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+              <Fragment key={row.id}>
+                <tr
+                  className={rowClasses.join(' ')}
+                  onClick={() => toggleExpand(m)}
+                >
+                  {row.getVisibleCells().map(cell => {
+                    const sizePx = `${cell.column.getSize()}px`
+                    return (
+                      <td
+                        key={cell.id}
+                        className={styles.td}
+                        style={{ width: sizePx, minWidth: sizePx, maxWidth: sizePx }}
+                      >
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </td>
+                    )
+                  })}
+                </tr>
+                {/* 📖 Expanded detail row — 3-column panel with info, playground, AI latency */}
+                {isExpanded && (
+                  <tr className={styles.expandRowWrapper}>
+                    <td colSpan={row.getVisibleCells().length} className={styles.expandRowCell}>
+                      <ExpandedDetailRow
+                        model={m}
+                        favorites={favorites}
+                        onBenchmark={onBenchmarkRow}
+                        onLaunch={onLaunch}
+                        onToast={onToast}
+                        toolMode={toolMode}
+                        onSetToolMode={onSetToolMode}
+                        onCycleToolMode={onCycleToolMode}
+                        onOpenFallback={onOpenFallback}
+                      />
                     </td>
-                  )
-                })}
-              </tr>
+                  </tr>
+                )}
+              </Fragment>
             )
           })}
         </tbody>

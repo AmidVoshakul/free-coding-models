@@ -77,6 +77,31 @@ export default function App() {
   const [toasts, setToasts] = useState([])
   const lastActivityRef = useRef(Date.now())
 
+  // 📖 PostHog: track app_web_start on mount
+  useEffect(() => {
+    try {
+      if (typeof window !== 'undefined' && window.posthog?.capture) {
+        window.posthog.capture('app_web_start', {
+          version: __APP_VERSION__ || 'unknown',
+          timestamp: new Date().toISOString(),
+        })
+      }
+    } catch {}
+  }, [])
+
+  // 📖 PostHog: track app_router_start when router opens
+  const handleRouterOpen = useCallback(() => {
+    setRouterOpen(true)
+    try {
+      if (typeof window !== 'undefined' && window.posthog?.capture) {
+        window.posthog.capture('app_router_start', {
+          version: __APP_VERSION__ || 'unknown',
+          timestamp: new Date().toISOString(),
+        })
+      }
+    } catch {}
+  }, [])
+
   // ── Toast helpers ────────────────────────────────────────────────────────
   const addToast = useCallback((message, type = 'info') => {
     const id = ++toastIdCounter
@@ -248,7 +273,7 @@ export default function App() {
     if (viewId === 'help') { setHelpOpen(true); return }
     if (viewId === 'changelog') { setChangelogOpen(true); setChangelogDefaultVersion(null); return }
     if (viewId === 'recommend') { setRecommendOpen(true); return }
-    if (viewId === 'router') { setRouterOpen(true); return }
+    if (viewId === 'router') { handleRouterOpen(); return }
     if (viewId === 'playground') { setPlaygroundOpen(true); return }
     if (viewId === 'install-endpoints') { setInstallEndpointsOpen(true); return }
     if (viewId === 'installed-models') { setInstalledModelsOpen(true); return }
@@ -379,6 +404,10 @@ export default function App() {
                 sortDirection={sortDirection}
                 onSort={toggleSort}
                 toolMode={toolMode}
+                onToast={addToast}
+                onSetToolMode={setToolMode}
+                onCycleToolMode={cycleToolMode}
+                onOpenFallback={(model) => setIncompatibleRequest({ model, toolMode })}
               />
             </main>
           )}
@@ -403,19 +432,7 @@ export default function App() {
         </div>
       </div>
 
-      <DetailPanel
-        model={selectedModel}
-        onClose={handleCloseDetail}
-        favorites={favorites}
-        onBenchmark={handleBenchmarkRow}
-        onLaunch={handleInstallEndpoint}
-        toolMode={toolMode}
-        onSetToolMode={setToolMode}
-        onCycleToolMode={cycleToolMode}
-        models={models}
-        onOpenFallback={(model) => setIncompatibleRequest({ model, toolMode })}
-        onToast={addToast}
-      />
+      {/* 📖 DetailPanel side panel replaced by expand row in ModelTable */}
 
       {exportOpen && (
         <ExportModal

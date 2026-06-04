@@ -357,3 +357,15 @@
 .benchRow .launchCell {
   opacity: 1;
 }
+
+/* ─── Expandable row styles ─── */
+.expandedRow {
+  background: var(--color-bg-active) !important;
+}
+.expandRowWrapper {
+  border: none;
+}
+.expandRowCell {
+  padding: 0 !important;
+  border-bottom: 2px solid var(--color-accent) !important;
+}

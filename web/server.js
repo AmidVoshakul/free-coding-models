@@ -45,7 +45,7 @@ import {
   getAvg, getVerdict, getUptime, getP95, getJitter,
   getStabilityScore,
 } from '../src/core/utils.js'
-import { benchmarkModel, BENCHMARK_TIMEOUT_MS } from '../src/core/benchmark.js'
+import { benchmarkModel, BENCHMARK_TIMEOUT_MS, BENCHMARK_PROMPT } from '../src/core/benchmark.js'
 import { getInstallTargetModes, installProviderEndpoints, getConfiguredInstallableProviders, getProviderCatalogModels } from '../src/core/endpoint-installer.js'
 import { isModelCompatibleWithTool } from '../src/core/tool-metadata.js'
 import { sendUsageTelemetry } from '../src/core/telemetry.js'
@@ -1027,6 +1027,171 @@ async function handleRequest(req, res) {
         noteUserActivity()
         const benchmarkResult = await runSingleBenchmark(result)
         sendJson(res, 200, benchmarkResult)
+        return
+      }
+
+      case '/api/benchmark-stream': {
+        if (req.method !== 'POST') {
+          res.writeHead(405)
+          res.end('Method Not Allowed')
+          return
+        }
+
+        let body
+        try {
+          body = await readJsonBody(req)
+        } catch {
+          res.writeHead(400)
+          res.end('Invalid JSON')
+          return
+        }
+
+        const result = getResult(body.providerKey, body.modelId)
+        if (!result) {
+          sendJson(res, 404, { error: 'Model not found' })
+          return
+        }
+
+        const source = sources[result.providerKey]
+        const apiKey = getApiKey(config, result.providerKey)
+        if (!apiKey) {
+          sendJson(res, 401, { error: 'No API key configured' })
+          return
+        }
+
+        const key = getResultKey(result)
+        benchmarkRunning.add(key)
+        broadcastUpdate({ immediate: true })
+
+        // 📖 Set SSE headers for streaming response to the browser
+        res.writeHead(200, {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+          'X-Accel-Buffering': 'no',
+        })
+
+        try {
+          // Build the upstream URL — append /v1/chat/completions if needed
+          let upstreamUrl = source?.url || result.url
+          if (!upstreamUrl.includes('/chat/completions')) {
+            upstreamUrl = upstreamUrl.replace(/\/+$/, '') + '/v1/chat/completions'
+          }
+
+          // 📖 ZAI provider: strip the "zai/" prefix from modelId for the API
+          let apiModelId = result.modelId
+          if (result.providerKey === 'zai' && apiModelId.startsWith('zai/')) {
+            apiModelId = apiModelId.slice(4)
+          }
+
+          const upstreamHeaders = {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+          }
+
+          // 📖 OpenRouter requires HTTP-Referer and X-Title headers
+          if (result.providerKey === 'openrouter') {
+            upstreamHeaders['HTTP-Referer'] = 'https://github.com/vava-nessa/free-coding-models'
+            upstreamHeaders['X-Title'] = 'free-coding-models'
+          }
+
+          const reqBody = {
+            model: apiModelId,
+            messages: [{ role: 'user', content: BENCHMARK_PROMPT }],
+            max_tokens: 140,
+            temperature: 0,
+            stream: true,
+          }
+
+          const resp = await fetch(upstreamUrl, {
+            method: 'POST',
+            headers: upstreamHeaders,
+            body: JSON.stringify(reqBody),
+            signal: AbortSignal.timeout(20000),
+          })
+
+          if (!resp.ok) {
+            let message = `HTTP ${resp.status}`
+            try {
+              const errJson = await resp.json()
+              message = errJson?.error?.message || errJson?.error || errJson?.message || message
+            } catch { /* keep default */ }
+            res.write('event: error\ndata: ' + JSON.stringify({ error: message }) + '\n\n')
+            res.end()
+            benchmarkRunning.delete(key)
+            broadcastUpdate({ immediate: true })
+            return
+          }
+
+          // 📖 Parse SSE stream from the provider — extract tokens and measure TPS
+          const reader = resp.body.getReader()
+          const decoder = new TextDecoder()
+          const t0 = performance.now()
+          let tokenCount = 0
+          let fullText = ''
+          let buffer = ''
+
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+
+            buffer += decoder.decode(value, { stream: true })
+            const lines = buffer.split('\n')
+            buffer = lines.pop() || '' // keep incomplete line in buffer
+
+            for (const line of lines) {
+              const trimmed = line.trim()
+              if (!trimmed.startsWith('data: ')) continue
+              const payload = trimmed.slice(6)
+              if (payload === '[DONE]') continue
+
+              let parsed
+              try { parsed = JSON.parse(payload) } catch { continue }
+
+              const delta = parsed?.choices?.[0]?.delta?.content
+              if (!delta) continue
+
+              fullText += delta
+              tokenCount++
+              res.write('event: token\ndata: ' + JSON.stringify({
+                token: delta,
+                totalMs: Math.round(performance.now() - t0),
+                tokens: tokenCount,
+                tps: Math.round(tokenCount / ((performance.now() - t0) / 1000) * 10) / 10,
+                text: fullText,
+              }) + '\n\n')
+            }
+          }
+
+          const totalMs = Math.round(performance.now() - t0)
+          const tps = tokenCount / (totalMs / 1000)
+
+          res.write('event: done\ndata: ' + JSON.stringify({
+            totalMs,
+            outputTokens: tokenCount,
+            tokensPerSecond: Math.round(tps * 10) / 10,
+            answerPreview: fullText.slice(0, 100),
+          }) + '\n\n')
+          res.end()
+
+          // 📖 Update shared benchmark state so the dashboard reflects the result
+          const benchmarkResult = {
+            ok: true,
+            totalMs,
+            outputTokens: tokenCount,
+            tokensPerSecond: tps,
+            answerPreview: fullText.slice(0, 60),
+          }
+          benchmarkResults.set(key, benchmarkResult)
+          benchmarkRunning.delete(key)
+          updateHealthFromBenchmark(result, benchmarkResult)
+          broadcastUpdate({ immediate: true })
+        } catch (err) {
+          res.write('event: error\ndata: ' + JSON.stringify({ error: err?.message || 'Stream failed' }) + '\n\n')
+          res.end()
+          benchmarkRunning.delete(key)
+          broadcastUpdate({ immediate: true })
+        }
         return
       }
 

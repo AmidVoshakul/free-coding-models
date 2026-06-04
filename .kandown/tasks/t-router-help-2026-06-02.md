@@ -1,9 +1,10 @@
 ---
 id: t-router-help-2026-06-02
 title: Human-friendly router health labels + How-it-works help
-status: In Progress
+status: Todo
 priority: medium
 created: 2026-06-02
+order: 1
 ---
 
 # Router health: human-friendly labels + help modal section
