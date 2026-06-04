@@ -130,7 +130,7 @@ import { getConfiguredInstallableProviders, installProviderEndpoints, refreshIns
 import { loadCache, saveCache, clearCache, getCacheAge } from '../core/cache.js'
 import { checkConfigSecurity } from '../core/security.js'
 import { buildCliHelpText } from './cli-help.js'
-import { detectActiveTheme, THEME_BG_RGB, getTheme } from './theme.js'
+import { detectActiveTheme, THEME_BG_RGB, getTheme, patchThemeBg } from './theme.js'
 
 // 📖 mergedModels: cross-provider grouped model list (one entry per label, N providers each)
 // 📖 mergedModelByLabel: fast lookup map from display label → merged model entry
@@ -867,7 +867,9 @@ export async function runApp(cliArgs, config, startupOptions = {}) {
               : state.changelogOpen
                 ? overlays.renderChangelog()
                  : tableContent
-    process.stdout.write(ALT_HOME + content)
+    // 📖 Strip stale bg resets emitted by chalk across ALL renderers (table + overlays).
+    const patched = patchThemeBg(content)
+    process.stdout.write(ALT_HOME + patched)
     if (process.stdout.isTTY) {
       process.stdout.flush && process.stdout.flush()
     }
@@ -887,7 +889,7 @@ export async function runApp(cliArgs, config, startupOptions = {}) {
     benchmarkResults: state.benchmarkResults,
   })
 
-  process.stdout.write(ALT_HOME + renderTable({
+  process.stdout.write(ALT_HOME + patchThemeBg(renderTable({
     results: state.results,
     pendingPings: state.pendingPings,
     frame: state.frame,
@@ -920,7 +922,7 @@ export async function runApp(cliArgs, config, startupOptions = {}) {
     bestModeOnly: state.bestModeOnly,
     benchmarkResults: state.benchmarkResults,
     benchmarkRunning: state.benchmarkRunning,
-  }))
+  })))
   if (process.stdout.isTTY) {
     process.stdout.flush && process.stdout.flush()
   }

@@ -386,3 +386,18 @@ export const themeColors = {
    */
   bgFill: () => THEME_BG_RGB[activeTheme] ?? THEME_BG_RGB.dark,
 }
+
+/**
+ * 📖 Patch every \x1b[49m (bg reset) in an ANSI string by immediately
+ * 📖 re-applying the current theme's background colour. Chalk emits
+ * 📖 \x1b[49m after every bgRgb() call, which undoes our forced theme bg.
+ *
+ * 📖 Also handles \x1b[0m (full reset) which includes a bg reset.
+ */
+export function patchThemeBg(raw, bgRgb = null) {
+  const color = bgRgb ?? THEME_BG_RGB[activeTheme] ?? THEME_BG_RGB.dark
+  const BG_SET = `\x1b[48;2;${color[0]};${color[1]};${color[2]}m`
+  return raw
+    .replace(/\x1b\[0m/g, `\x1b[0m${BG_SET}`)
+    .replace(/\x1b\[49m/g, `\x1b[49m${BG_SET}`)
+}
